@@ -3,18 +3,18 @@ module fifo #(
     parameter FIFO_DEPTH      = 16
 )(
     input  wire                     clk,	
-    input  wire                     resetn,		
+    input  wire                     resetn,	
+
     // Write from CSR
-    input  wire                       tx_wen_i,
-    input  wire [FIFO_DATA_WIDTH-1:0] tx_data_i,		
-    output wire                       tx_full_o,  
+    input  wire                       tx_wen,
+    input  wire [FIFO_DATA_WIDTH-1:0] tx_data,		
+    output wire                       tx_full, 
+    output reg  [FIFO_ADDR_WIDTH:0]   tx_level,
+
     // Read to FSM
     input  wire                       tx_ren, 
-    output reg  [FIFO_DATA_WIDTH-1:0] tx_data_fifo,
-    output wire                       tx_empty,
-
-    // Level counter
-    output reg  [FIFO_ADDR_WIDTH:0]   tx_level
+    output reg  [FIFO_DATA_WIDTH-1:0] tx_data,
+    output wire                       tx_empty
 );
 
     function integer clog2;
@@ -28,15 +28,13 @@ module fifo #(
     endfunction
     localparam FIFO_ADDR_WIDTH = clog2(FIFO_DEPTH);
 
-    reg [FIFO_DATA_WIDTH-1:0] fifo_mem[0:FIFO_DEPTH-1];  
+    reg [7:0] fifo_mem[0:FIFO_DEPTH-1];  
     reg [FIFO_ADDR_WIDTH:0]   wr_ptr; 
     reg [FIFO_ADDR_WIDTH:0]   rd_ptr; 
 
     // Flags
     assign fifo_empty   = (level == 0);
     assign fifo_full    = (level == FIFO_DEPTH);
-    assign fifo_overrun = (wen && fifo_full);
-    assign fifo_underrun= (ren && fifo_empty);
 
     // Write
     always @(posedge clk or negedge resetn) begin
