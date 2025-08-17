@@ -1,9 +1,9 @@
-module fifo #(
+module tx_fifo #(
     parameter FIFO_DATA_WIDTH = 32,
     parameter FIFO_DEPTH      = 16
 )(
-    input  wire                     clk,	
-    input  wire                     resetn,	
+    input  wire  clk,	
+    input  wire  resetn,	
 
     // Write from CSR
     input  wire                       tx_wen,
