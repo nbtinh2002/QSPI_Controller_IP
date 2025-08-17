@@ -1,4 +1,3 @@
-BTN
 // Simple APB Master Driver with wait cycle handling and idle/busy handshake
 module apb_master (
     input wire clk,
