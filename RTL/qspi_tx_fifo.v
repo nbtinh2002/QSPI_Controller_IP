@@ -1,8 +1,8 @@
 module qspi_tx_fifo #(
     parameter FIFO_DEPTH = 16
 )(
-    input  wire  clk,	
-    input  wire  resetn,	
+    input wire  clk,	
+    input wire  resetn,	
 
     // Write from CSR
     input  wire        fifo_wen,
@@ -17,7 +17,6 @@ module qspi_tx_fifo #(
 );
     reg [7:0] fifo_mem[0:FIFO_DEPTH-1];
     reg [4:0] wr_ptr, rd_ptr; 
-    reg [4:0] level_cnt;
 
     assign fifo_empty = (wr_ptr == rd_ptr); 
     assign fifo_full = (fifo_level > FIFO_DEPTH - 4);
@@ -30,7 +29,7 @@ module qspi_tx_fifo #(
         if (!resetn) begin
             wr_ptr <= 5'd0;
         end else if (fifo_wen && !fifo_full) begin
-            fifo_mem[wr_ptr[3:0]]     <= data_in[32:24];
+            fifo_mem[wr_ptr[3:0]]     <= data_in[31:24];
             fifo_mem[wr_ptr[3:0] + 1] <= data_in[23:16];
             fifo_mem[wr_ptr[3:0] + 2] <= data_in[15:8];
             fifo_mem[wr_ptr[3:0] + 3] <= data_in[7:0];
