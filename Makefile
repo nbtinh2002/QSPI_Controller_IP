@@ -3,7 +3,7 @@
 #----------------------------------------------------------------
 
 # Top-level
-TOP ?= qspi_tx_fifo
+TOP ?= qspi_controller_ip
 TOP_TB	?= tb_$(TOP)
 
 # Folder

@@ -522,8 +522,12 @@ module qspi_fsm #(
 	always @(posedge qclk or negedge qresetn) begin
 		if(!qresetn) begin
 			done_r <= 1'b0;
+		end else if(start) begin
+			done_r <= 1'b0;
+		end else if(state==STOP_CS && next_state==IDLE) begin
+			done_r <= 1'b1;
 		end else begin
-			done_r <= (state==STOP_CS && next_state==IDLE);
+			done_r <= done_r;
 		end
 	end
 	assign done = done_r;

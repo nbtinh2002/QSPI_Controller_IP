@@ -69,7 +69,6 @@ always @(posedge qspi_sclk) begin
         erase_counter <= 0;
     end
 end
-
 always @(posedge qspi_sclk or posedge qspi_cs_n) begin
     if (qspi_cs_n) begin
         state <= ST_IDLE;
@@ -122,7 +121,7 @@ always @(posedge qspi_sclk or posedge qspi_cs_n) begin
                             dummy_cycles <= (nxt_cmd_reg == 8'h03) ? 0 : 
 											(nxt_cmd_reg == 8'hEB  ? 6 : 8);
                         end
-                        8'h02, 8'h38: begin// WRITE PAGE
+                        8'h02, 8'h32, 8'h38: begin// WRITE PAGE
                             dummy_cycles <= 0;
                             if (status_reg[1]) begin
                                 state <= ST_ADDR;
@@ -136,8 +135,7 @@ always @(posedge qspi_sclk or posedge qspi_cs_n) begin
                         8'hC7: begin // CE
                             if (status_reg[1]) begin
                                 integer j;
-                                for (j = 0; j < MEM_SIZE; j = j + 1) 
-									memory[j] <= 8'hFF;
+                                for (j = 0; j < MEM_SIZE; j = j + 1) memory[j] <= 8'hFF;
                                 state <= ST_ERASE;
                                 wip <= 1;
                             end else state <= ST_IDLE;
@@ -164,22 +162,19 @@ always @(posedge qspi_sclk or posedge qspi_cs_n) begin
                         end else if (cmd_reg == 8'h20 || cmd_reg == 8'hD8) begin // need to take care of erase here since CS de assert next cycle
                                 integer j;
                                 if (cmd_reg == 8'h20) begin
-                                for (j = nxt_addr_reg; j < nxt_addr_reg + SECTOR_SIZE; j = j + 1) 
-									memory[j] <= 8'hFF;
+                                    for (j = nxt_addr_reg; j < nxt_addr_reg + SECTOR_SIZE; j = j + 1) memory[j] <= 8'hFF;
                                 end else if (cmd_reg == 8'hD8) begin
-                                for (j = nxt_addr_reg; j < nxt_addr_reg + 65536; j = j + 1) 
-									memory[j] <= 8'hFF;
+                                    for (j = nxt_addr_reg; j < nxt_addr_reg + 65536; j = j + 1) memory[j] <= 8'hFF;
                                 end
                                 wip <= 1;
                                 state <= ST_ERASE;
                         end else if (dummy_cycles > 0) begin
 							state <= ST_DUMMY;
                         end else begin
-                            state <= (cmd_reg == 8'h02 || cmd_reg == 8'h38 ? ST_DATA_WRITE : 
-																			 ST_DATA_READ);
+                            state <= (cmd_reg == 8'h02 || cmd_reg == 8'h38 || cmd_reg == 8'h32) ? ST_DATA_WRITE : ST_DATA_READ;
                             bit_cnt <= 0;
                             byte_cnt <= 0;
-                            if (cmd_reg == 8'h02 || cmd_reg == 8'h38) io_oe <= 4'b0000;
+                            if (cmd_reg == 8'h02 || cmd_reg == 8'h38 || cmd_reg == 8'h32) io_oe <= 4'b0000;
                             else if (lanes == 1) io_oe <= 4'b0010;
                             else if (lanes == 2) io_oe <= 4'b0011;
                             else io_oe <= 4'b1111;
@@ -203,10 +198,10 @@ always @(posedge qspi_sclk or posedge qspi_cs_n) begin
             ST_DUMMY: begin
                 bit_cnt <= bit_cnt + 1;
                 if (bit_cnt == (dummy_cycles - 1)) begin
-                    state <= (cmd_reg == 8'h02 || cmd_reg == 8'h38 ? ST_DATA_WRITE : ST_DATA_READ);
+                    state <= (cmd_reg == 8'h02 || cmd_reg == 8'h38 || cmd_reg == 8'h32) ? ST_DATA_WRITE : ST_DATA_READ;
                     bit_cnt <= 0;
                     byte_cnt <= 0;
-                    if (cmd_reg == 8'h02 || cmd_reg == 8'h38) io_oe <= 4'b0000;
+                    if (cmd_reg == 8'h02 || cmd_reg == 8'h38 || cmd_reg == 8'h32) io_oe <= 4'b0000;
                     else if (lanes == 1) io_oe <= 4'b0010;
                     else if (lanes == 2) io_oe <= 4'b0011;
                     else io_oe <= 4'b1111;
