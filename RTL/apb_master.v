@@ -11,7 +11,7 @@ module apb_master (
     output reg [31:0] pwdata,
     input wire [31:0] prdata,
     input wire pready,
-
+ 
     // Control
     input wire start,
     input wire rw,    // 0 = read, 1 = write

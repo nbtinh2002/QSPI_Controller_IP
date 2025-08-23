@@ -20,7 +20,7 @@ module qspi_csr
 	input wire [31:0] pwdata,	
 	output reg [31:0] prdata,
 	output wire	pready,
-	output wire	pslerr,
+	output wire	pslverr,
 
 	// Interrupt request output
 	output wire	irq,
@@ -294,7 +294,7 @@ module qspi_csr
 				CMD_LEN_ADDR	:prdata	= cmd_len_reg;
 				CMD_DUMMY_ADDR	:prdata	= cmd_dummy_reg;
 				DMA_CFG_ADDR	:prdata	= dma_cfg_reg;
-				DMA_ADDR_ADDR	:prdata	= dma_addr_reg;
+				DMA_ADDR_ADDR	:prdata	= dma_addr_reg; 
 				DMA_LEN_ADDR	:prdata	= dma_len_reg;
 				FIFO_RX_ADDR	:prdata = rx_data_i;
 				FIFO_STAT_ADDR	:prdata	= fifo_stat_reg;

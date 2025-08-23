@@ -2,18 +2,19 @@ module qspi_ce (
     input  wire clk,
     input  wire resetn,
     // From CSR
+    input  wire enable,        // CTRL[0]
     input  wire cmd_trigger,   // CTRL[8]
     input  wire dma_en,        // CTRL[9]
     // Feedback signals from QSPI FSM / DMA
     input  wire qspi_done,
     input  wire dma_done,
     // Control signals to FSM / DMA
-    output reg  ce_start,
-    output reg  dma_start,    
+    output wire  ce_start,
+    output wire  dma_start,    
     // Back to CSR
-    output reg  ce_busy,
-    output reg  ce_done
-);
+    output wire  ce_busy,
+    output wire  ce_done
+); 
 
     localparam [1:0] IDLE   = 2'b00,
                      START  = 2'b01,
@@ -21,7 +22,8 @@ module qspi_ce (
                      FINISH = 2'b11;
 
     reg [1:0] state, next_state;
-
+ 
+    
     // State register
     always @(posedge clk or negedge resetn) begin
         if (!resetn)
@@ -35,7 +37,7 @@ module qspi_ce (
         next_state = state;
         case (state)
             IDLE: begin
-                if (cmd_trigger)
+                if (cmd_trigger && enable)
                     next_state = START;
             end
             START: begin
@@ -57,17 +59,8 @@ module qspi_ce (
     end
 
     // Outputs
-    always @(posedge clk or negedge resetn) begin
-        if (!resetn) begin
-            ce_start    <= 0;
-            dma_start   <= 0;
-            ce_busy     <= 0;
-        end else begin
-            ce_done     <= (ce_start) ? 0 : (state == FINISH) ? 1 : ce_done;
-            ce_busy     <= (state != IDLE);
-            dma_start   <= (state == START) ? dma_en : 0;
-            ce_start    <= (state == START) ? 1 : 0;
-        end
-    end
-
+    assign ce_start = (state == START);
+    assign dma_start = (state == START) ? dma_en : 0;
+    assign ce_busy = (state != IDLE );
+    assign ce_done = (state == FINISH); // done = pulse 1 chu kỳ
 endmodule

@@ -7,7 +7,7 @@ module axi4_ram_slave (
     input wire awvalid,
     input wire [31:0] awaddr,
     output reg awready,
-
+ 
     // Write data channel
     input wire wvalid,
     input wire [31:0] wdata,

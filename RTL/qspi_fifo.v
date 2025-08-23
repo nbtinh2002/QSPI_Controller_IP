@@ -33,7 +33,7 @@ module qspi_fifo #(
 
     // WRITE logic
     always @(posedge clk or negedge resetn) begin
-        if (!resetn) begin
+        if (!resetn) begin 
             wr_ptr <= 5'd0;
         end else if (fifo_wen && !fifo_full) begin
             if (WRITE_WIDTH == 32) begin
