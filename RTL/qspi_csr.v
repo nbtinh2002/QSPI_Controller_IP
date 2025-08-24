@@ -142,27 +142,27 @@ module qspi_csr
 	);
 
 	// Address constant for paddr APB_ADDR_WIDTH bit
-	localparam [11:0] 	ID_ADDR			= 12'h000;// RO
-	localparam [11:0]	CTRL_ADDR		= 12'h004;// RW
-	localparam [11:0]	STATUS_ADDR 	= 12'h008;// RO
-	localparam [11:0]	INT_EN_ADDR 	= 12'h00C;// RW
-	localparam [11:0]	INT_STAT_ADDR	= 12'h010;// RW1C
-	localparam [11:0]	CLK_DIV_ADDR	= 12'h014;// RW
-	localparam [11:0]	CS_CTRL_ADDR	= 12'h018;// RW
-	localparam [11:0]	XIP_CFG_ADDR	= 12'h01C;// RW
-	localparam [11:0]	XIP_CMD_ADDR	= 12'h020;// RW
-	localparam [11:0]	CMD_CFG_ADDR	= 12'h024;// RW
-	localparam [11:0]	CMD_OP_ADDR		= 12'h028;// RW
-	localparam [11:0]	CMD_ADDR_ADDR	= 12'h02C;// RW
-	localparam [11:0]	CMD_LEN_ADDR	= 12'h030;// RW
-	localparam [11:0]	CMD_DUMMY_ADDR	= 12'h034;// RW
-	localparam [11:0]	DMA_CFG_ADDR	= 12'h038;// RW
-	localparam [11:0]	DMA_ADDR_ADDR	= 12'h03C;// RW
-	localparam [11:0]	DMA_LEN_ADDR	= 12'h040;// RW
-	localparam [11:0]	FIFO_TX_ADDR	= 12'h044;// WO
-	localparam [11:0]	FIFO_RX_ADDR	= 12'h048;// RO
-	localparam [11:0]	FIFO_STAT_ADDR	= 12'h04C;// RO
-	localparam [11:0]	ERR_STAT_ADDR	= 12'h050;// RO
+	localparam [APB_ADDR_WIDTH-1:0] ID_ADDR			= 'h000;// RO
+	localparam [APB_ADDR_WIDTH-1:0]	CTRL_ADDR		= 'h004;// RW
+	localparam [APB_ADDR_WIDTH-1:0]	STATUS_ADDR 	= 'h008;// RO
+	localparam [APB_ADDR_WIDTH-1:0]	INT_EN_ADDR 	= 'h00C;// RW
+	localparam [APB_ADDR_WIDTH-1:0]	INT_STAT_ADDR	= 'h010;// RW1C
+	localparam [APB_ADDR_WIDTH-1:0]	CLK_DIV_ADDR	= 'h014;// RW
+	localparam [APB_ADDR_WIDTH-1:0]	CS_CTRL_ADDR	= 'h018;// RW
+	localparam [APB_ADDR_WIDTH-1:0]	XIP_CFG_ADDR	= 'h01C;// RW
+	localparam [APB_ADDR_WIDTH-1:0]	XIP_CMD_ADDR	= 'h020;// RW
+	localparam [APB_ADDR_WIDTH-1:0]	CMD_CFG_ADDR	= 'h024;// RW
+	localparam [APB_ADDR_WIDTH-1:0]	CMD_OP_ADDR		= 'h028;// RW
+	localparam [APB_ADDR_WIDTH-1:0]	CMD_ADDR_ADDR	= 'h02C;// RW
+	localparam [APB_ADDR_WIDTH-1:0]	CMD_LEN_ADDR	= 'h030;// RW
+	localparam [APB_ADDR_WIDTH-1:0]	CMD_DUMMY_ADDR	= 'h034;// RW
+	localparam [APB_ADDR_WIDTH-1:0]	DMA_CFG_ADDR	= 'h038;// RW
+	localparam [APB_ADDR_WIDTH-1:0]	DMA_ADDR_ADDR	= 'h03C;// RW
+	localparam [APB_ADDR_WIDTH-1:0]	DMA_LEN_ADDR	= 'h040;// RW
+	localparam [APB_ADDR_WIDTH-1:0]	FIFO_TX_ADDR	= 'h044;// WO
+	localparam [APB_ADDR_WIDTH-1:0]	FIFO_RX_ADDR	= 'h048;// RO
+	localparam [APB_ADDR_WIDTH-1:0]	FIFO_STAT_ADDR	= 'h04C;// RO
+	localparam [APB_ADDR_WIDTH-1:0]	ERR_STAT_ADDR	= 'h050;// RO
 
 	// Internal registers 
 	reg [31:0] 	ctrl_reg;
