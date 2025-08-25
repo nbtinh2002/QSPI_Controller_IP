@@ -7,7 +7,7 @@ module tb_qspi_controller_ip;
     
     //APB signals
     wire        psel, penable, pwrite;
-    wire [11:0]  paddr = {4'b0000, apb_paddr}; // 8-bit address
+    wire [11:0] paddr = {4'b0000, apb_paddr}; 
     wire [31:0] pwdata, prdata;
     wire        pready, pslverr;
     reg         apb_start, apb_rw;
@@ -16,9 +16,10 @@ module tb_qspi_controller_ip;
     wire [31:0] apb_rdata;
     wire        apb_idle, apb_busy;
     wire [7:0]  apb_paddr;
+
     // QSPI bus
-    wire sclk, cs_n, hold_n, wp_n;
-    wire io0, io1, io2, io3;
+    wire        sclk, cs_n, hold_n, wp_n;
+    wire        io0, io1, io2, io3;
 
     // IRQ signal
     wire        irq;
@@ -54,7 +55,7 @@ module tb_qspi_controller_ip;
     // Clock generation 
     initial begin
         clk = 0;
-        forever #5 clk = ~clk; // 100 MHz
+        forever #5 clk = ~clk; 
     end
     // Reset generation
     initial begin
@@ -75,7 +76,6 @@ module tb_qspi_controller_ip;
         @(posedge clk);
         apb_start  <= 0;
         while (!apb_idle) @(posedge clk);
-        $display("[%0t] APB WRITE addr=0x%0h data=0x%0h", $time, addr, data);
     end
     endtask
 
@@ -91,26 +91,21 @@ module tb_qspi_controller_ip;
         apb_start  <= 0;
         while (!apb_idle) @(posedge clk);
         data = apb_rdata;
-        $display("[%0t] APB READ addr=0x%0h data=0x%0h", $time, addr, data);
+       
     end
     endtask
     
-    task read_rx_fifo;
-        output [31:0] data_out;
-    begin
-        apb_read(8'h48, data_out); // 0x48 là địa chỉ FIFO RX
-        $display("[%0t] RX_FIFO read: %h", $time, data_out);
-    end
-    endtask
-
-    // đọc nhiều word
     task read_rx_fifo_multi;
+        input  [7:0]  addr;
         input integer nwords;
         integer i;
         reg [31:0] rdata;
     begin
         for (i=0; i<nwords; i=i+1) begin
-            read_rx_fifo(rdata);
+            apb_read(addr, rdata);
+            wait(dut.csr_inst.read);
+            #20;
+            $display("[%0t] APB READ: addr=0x%h data=0x%h", $time, addr, dut.csr_inst.rx_data_i);
         end
     end
     endtask
@@ -122,19 +117,36 @@ module tb_qspi_controller_ip;
         wait(rst_n);
         wait(apb_idle); 
         
-        $display("=== Test sequence: Single Lane Read (0x03, no dummy) ===");
+        $display("========== Testing Single Lane Read (0x03, no dummy) ==========");
         apb_write(8'h04, 32'h0000_0001);  // CTRL: ENABLE=1
         apb_write(8'h24, 32'h0000_2040);  // CMD_CFG
         apb_write(8'h28, 32'h0000_0003);  // CMD_OP
         apb_write(8'h2C, 32'h0000_000F);  // ADDR: 0x00
-        apb_write(8'h30, 32'h0000_0004);  // CMD_LEN: 0x04
+        apb_write(8'h30, 32'h0000_0004);  // CMD_LEN: 4byte
         apb_write(8'h04, 32'h0000_0101);  // CTRL: COMMAND_TRIGGER=1
-        
         wait(dut.qspi_ce_inst.ce_done);
         
-        read_rx_fifo_multi(4);
- 
-        $display("=== Test done ===");
+        read_rx_fifo_multi(8'h48, 4); // RX_FIFO_REG
+
+        $display("========== Testing Write Enable (0x06, single lane) ==========");
+        apb_write(8'h04, 32'h0000_0001);  // CTRL: ENABLE=1
+        apb_write(8'h24, 32'h0000_0000);  // CMD_CFG
+        apb_write(8'h28, 32'h0000_0006);  // CMD_OP
+        apb_write(8'h2C, 32'h0000_0000);  // ADDR: no address
+        apb_write(8'h30, 32'h0000_0000);  // CMD_LEN: no length
+        apb_write(8'h04, 32'h0000_0101);  // CTRL: COMMAND_TRIGGER=1
+        wait(dut.qspi_ce_inst.ce_done);
+
+        $display("========== Testing Read Status Register (0x05) ==========");
+        apb_write(8'h04, 32'h0000_0001);  // CTRL: ENABLE=1
+        apb_write(8'h24, 32'h0000_2000);  // CMD_CFG
+        apb_write(8'h28, 32'h0000_0005);  // CMD_OP
+        apb_write(8'h30, 32'h0000_0001);  // CMD_LEN: 1 byte
+        apb_write(8'h04, 32'h0000_0101);  // CTRL: COMMAND_TRIGGER=1
+        wait(dut.qspi_ce_inst.ce_done);
+
+        read_rx_fifo_multi(8'h48, 1); // RX_FIFO_REG
+
         repeat (10) @(posedge clk);
         $finish;
     end

@@ -105,7 +105,7 @@ module qspi_controller_ip
 		.ce_busy(ce_busy), .ce_done(ce_done)
 	);
 	// TX FIFO
-	qspi_fifo #(.FIFO_DEPTH(FIFO_DEPTH), .WRITE_WIDTH(32), .READ_WIDTH(8)) tx_fifo_inst ( 
+	qspi_tx_fifo #(.FIFO_DEPTH(FIFO_DEPTH)) tx_fifo_inst ( 
 		.clk(clk), .resetn(resetn), 
 		.data_in(tx_data), .data_out(tx_data_fifo), 
 		.fifo_wen(tx_wen),.fifo_ren(tx_ren),
@@ -113,7 +113,7 @@ module qspi_controller_ip
 		.fifo_level(tx_level)
 	);
 	// RX FIFO
-	qspi_fifo #(.FIFO_DEPTH(FIFO_DEPTH), .WRITE_WIDTH(8), .READ_WIDTH(32)) rx_fifo_inst (
+	qspi_rx_fifo #(.FIFO_DEPTH(FIFO_DEPTH)) rx_fifo_inst (
 		.clk(clk), .resetn(resetn), 
 		.data_in(rx_data_fifo), .data_out(rx_data), 
 		.fifo_wen(rx_wen),.fifo_ren(rx_ren),

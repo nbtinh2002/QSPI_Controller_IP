@@ -155,7 +155,7 @@ module qspi_fsm #(
 		end
 		DATA: begin
 			if (underrun || overrun || timeout)			next_state = STOP_CS;
-			else if(bits_sent >= cmd_len*8-1)			next_state = STOP_CS;
+			else if(bits_sent >= cmd_len*8)			next_state = STOP_CS;
 			else next_state = DATA;
 		end
 		STOP_CS: 										next_state = IDLE;
@@ -197,7 +197,7 @@ module qspi_fsm #(
 		end else begin
 			if(state==IDLE && gap_active) begin
 				cs_n_reg <=  1'b1;
-			end else if(state==CS || next_state==STOP_CS) begin
+			end else if(state==CS ) begin
 				cs_n_reg <= 1'b1;
 			end else if(state==CMD || state==ADDR || state==MODE || state==DUMMY || state== DATA) begin
 				cs_n_reg <= 1'b0;
@@ -261,9 +261,9 @@ module qspi_fsm #(
 	reg 	  	tx_fetch_pending;
 
 	reg [7:0] 	rx_shift_reg;
-	reg [2:0] 	rx_bit_count;
+	reg [3:0] 	rx_bit_count;
 	reg 	  	rx_byte_ready;
-
+	reg			rx_started;
 	wire stall_tx = (state==DATA) && (cmd_dir==1'b0) && (!tx_shift_valid);
 	wire stall_rx = (state==DATA) && (cmd_dir==1'b1) && (rx_full) && ((bits_sent+n_data_lanes)>=6'd8);
 	wire want_tx_byte = stall_tx && (bits_sent[2:0]==3'd0);
@@ -347,42 +347,49 @@ module qspi_fsm #(
 	end
 
 	// Read phase
-wire [3:0] sum_bits   = rx_bit_count + n_data_lanes;
-wire       byte_done  = (sum_bits >= 4'd8);
+	always @(negedge qclk or negedge qresetn) begin
+		if (!qresetn) begin
+			rx_shift_reg   <= 8'h00;
+		end else begin
+			if (state==DATA && cmd_dir==1'b1 && eff_sample) begin
+				case (n_data_lanes)
+					3'd1: rx_shift_reg <= {rx_shift_reg[6:0], io_in[1]};
+					3'd2: rx_shift_reg <= {rx_shift_reg[5:0], io_in[1:0]};
+					3'd4: rx_shift_reg <= {rx_shift_reg[3:0], io_in[3:0]};
+				endcase
+			end
+			if ((rx_bit_count == 4'd0) && rx_started && !rx_full) begin
+				rx_data_fifo <= lsb_first ? bit_reverse8({rx_shift_reg[6:0], io_in[1]}) : {rx_shift_reg[6:0], io_in[1]};
+				rx_wen       <= 1'b1;
+			end
+		end
+	end
 
-always @(negedge qclk or negedge qresetn) begin
-    if (!qresetn) begin
-        rx_shift_reg   <= 8'h00;
-        rx_bit_count   <= 3'd0;
-        rx_wen         <= 1'b0;
-        rx_data_fifo   <= 8'h00;
-        rx_byte_ready  <= 1'b0;
-    end else begin
-        rx_wen        <= 1'b0;
-        rx_byte_ready <= 1'b0;
-
-        if (state==DATA && cmd_dir==1'b1 && eff_sample) begin
-            case (n_data_lanes)
-                3'd1: rx_shift_reg <= {rx_shift_reg[6:0], io_in[1]};
-                3'd2: rx_shift_reg <= {rx_shift_reg[5:0], io_in[1:0]};
-                3'd4: rx_shift_reg <= {rx_shift_reg[3:0], io_in[3:0]};
-            endcase
-
-            if (byte_done) begin
-                rx_bit_count  <= 3'd0;
-                rx_byte_ready <= 1'b1;  // pulse đúng 1 chu kỳ
-            end else begin
-                rx_bit_count  <= sum_bits[2:0];
-            end
-        end
-
-        // Push FIFO khi có byte_ready
-        if (rx_byte_ready && !rx_full) begin
-            rx_data_fifo <= lsb_first ? bit_reverse8(rx_shift_reg) : rx_shift_reg;
-            rx_wen       <= 1'b1;
-        end
-    end
-end
+	always @(posedge qclk or negedge qresetn) begin
+		if (!qresetn) begin
+			rx_bit_count   <= 3'd0;
+			rx_wen         <= 1'b0;
+			rx_data_fifo   <= 8'h00;
+			rx_byte_ready  <= 1'b0;
+			rx_started     <= 1'b0;  
+		end else begin
+			rx_wen        <= 1'b0;
+			rx_byte_ready <= 1'b0;
+			if (next_state==DATA) begin
+				rx_bit_count <= 0;
+				rx_started   <= 1'b0; 
+			end
+			if (state==DATA && cmd_dir==1'b1) begin
+				if (rx_bit_count + n_data_lanes >= 4'd8) begin
+					rx_bit_count <= 0;
+					if (rx_started) rx_byte_ready <= 1'b1;
+					else rx_started <= 1'b1; 
+				end else begin
+					rx_bit_count <= rx_bit_count + n_data_lanes;
+				end
+			end
+		end
+	end
 
 	//==========================================================================================//
 	// IO OUTPUT PREPARATION + IO DRIVE LOGIC
@@ -418,6 +425,11 @@ end
 
 	// IO drive logic
 	wire io_drive_en = (state==CMD)||(state==ADDR)||(state==MODE)||(state==DATA&&cmd_dir==1'b0);
+
+	/*((state==CMD)  && (bits_sent < 8))||
+					   ((state==ADDR) && (bits_sent < addr_bits_need))||
+					   ((state==MODE) && (bits_sent < 8))||
+						(state==DATA  &&  cmd_dir==1'b0);*/
 	always @(posedge qclk or negedge qresetn) begin
 		if(!qresetn) begin
 			io_out <= 4'h0;
