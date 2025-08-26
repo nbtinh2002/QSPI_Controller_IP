@@ -121,7 +121,7 @@ module tb_qspi_controller_ip;
         apb_write(8'h04, 32'h0000_0001);  // CTRL: ENABLE=1
         apb_write(8'h24, 32'h0000_2040);  // CMD_CFG
         apb_write(8'h28, 32'h0000_0003);  // CMD_OP
-        apb_write(8'h2C, 32'h0000_000F);  // ADDR: 0x00
+        apb_write(8'h2C, 32'h0000_000F);  // ADDR: 0x0F
         apb_write(8'h30, 32'h0000_0004);  // CMD_LEN: 4byte
         apb_write(8'h04, 32'h0000_0101);  // CTRL: COMMAND_TRIGGER=1
         wait(dut.qspi_ce_inst.ce_done);
@@ -137,7 +137,28 @@ module tb_qspi_controller_ip;
         apb_write(8'h04, 32'h0000_0101);  // CTRL: COMMAND_TRIGGER=1
         wait(dut.qspi_ce_inst.ce_done);
 
-        $display("========== Testing Read Status Register (0x05) ==========");
+        $display("========== Testing Signal Lane Write (0x02, 4 bytes) ==========");
+        apb_write(8'h44, 32'hAABBCCDD);   // TX_FIFO_REG 
+        apb_write(8'h04, 32'h0000_0001);  // CTRL: ENABLE=1
+        apb_write(8'h24, 32'h0000_0040);  // CMD_CFG
+        apb_write(8'h28, 32'h0000_0002);  // CMD_OP
+        apb_write(8'h2C, 32'h0000_0000);  // ADDR: no address
+        apb_write(8'h30, 32'h0000_0004);  // CMD_LEN: 4byte
+        apb_write(8'h04, 32'h0000_0101);  // CTRL: COMMAND_TRIGGER=1
+        wait(dut.qspi_ce_inst.ce_done);
+
+        $display("========== Testing Single Lane Read (0x03, no dummy) ==========");
+        apb_write(8'h04, 32'h0000_0001);  // CTRL: ENABLE=1
+        apb_write(8'h24, 32'h0000_2040);  // CMD_CFG
+        apb_write(8'h28, 32'h0000_0003);  // CMD_OP
+        apb_write(8'h2C, 32'h0000_0000);  // ADDR: 0x0F
+        apb_write(8'h30, 32'h0000_0004);  // CMD_LEN: 4byte
+        apb_write(8'h04, 32'h0000_0101);  // CTRL: COMMAND_TRIGGER=1
+        wait(dut.qspi_ce_inst.ce_done);
+        
+        read_rx_fifo_multi(8'h48, 4); // RX_FIFO_REG
+
+/*        $display("========== Testing Read Status Register (0x05) ==========");
         apb_write(8'h04, 32'h0000_0001);  // CTRL: ENABLE=1
         apb_write(8'h24, 32'h0000_2000);  // CMD_CFG
         apb_write(8'h28, 32'h0000_0005);  // CMD_OP
@@ -145,7 +166,7 @@ module tb_qspi_controller_ip;
         apb_write(8'h04, 32'h0000_0101);  // CTRL: COMMAND_TRIGGER=1
         wait(dut.qspi_ce_inst.ce_done);
 
-        read_rx_fifo_multi(8'h48, 1); // RX_FIFO_REG
+        read_rx_fifo_multi(8'h48, 1); // RX_FIFO_REG*/
 
         repeat (10) @(posedge clk);
         $finish;
