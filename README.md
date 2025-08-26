@@ -5,73 +5,56 @@
 The **Quad Serial Peripheral Interface (QSPI) Controller** is a high-performance IP core designed to interface with serial NOR flash memories using **single, dual, and quad SPI protocols**.  
 It supports **command-based access**, **DMA transfers**, and **XIP (Execute-In-Place) mode**, enabling efficient boot, firmware update, and high-speed data transactions in SoC and FPGA designs.
 
-The controller provides:
+---
 
-- **APB slave interface** for configuration and control registers (CSR)  
-- **AXI4 master interface** for DMA operations to/from system memory  
-- **AXI4 slave interface** for memory-mapped XIP access  
-- **QSPI I/O interface** for direct communication with flash devices  
+## Features
 
-Integrated **TX/RX FIFOs** decouple system bus and QSPI flash speeds, allowing flexible operation under various performance requirements.  
+- Supports **Standard, Dual, and Quad SPI protocols** (1-1-1, 1-1-2, 1-1-4, 1-4-4).
+- **APB slave interface** for CSR access and FIFO read/write.
+- **AXI4 master interface** for DMA block transfers.
+- **AXI4 slave interface** for memory-mapped XIP mode.
+- Configurable transaction format: opcode, address lanes, data lanes, dummy cycles, mode bits.
+- FIFO buffers (default 16 bytes) for TX/RX decoupling.
+- **Interrupts**: command done, DMA done, FIFO events, error flags.
+- **Error detection**: timeout, overrun, underrun, AXI error.
+- **Power management**: clock gating, low-power mode.
 
 ---
 
-## Key Features
+## Architecture
 
-- **Multi-Mode QSPI Flash Support**
-  - Standard SPI (1-1-1), Dual SPI (1-1-2), Quad SPI (1-1-4 / 1-4-4)  
-  - Configurable **opcode, address, mode bits, and dummy cycles**  
-  - Supports common flash commands: **Read, Fast Read, Page Program, Erase**
-
-- **Flexible System Integration**
-  - **APB Slave** for CSR access and FIFO read/write in non-DMA mode  
-  - **AXI4 Master** for high-speed **DMA transfers** between Flash and DRAM  
-  - **AXI4 Slave** for **XIP (Execute-In-Place)** memory-mapped flash access
-
-- **High-Performance Data Transfers**
-  - **TX/RX FIFOs** to buffer data and handle speed mismatch  
-  - **Configurable burst length** for DMA to improve throughput  
-  - **Quad SPI mode** to maximize read performance
-
-- **Command Engine (CE)**
-  - Automates opcode, address, dummy, and data phases  
-  - Supports **CPU-driven** and **DMA-driven** transfers  
-  - Provides **BUSY/DONE flags** for software polling
-
-- **DMA Engine (AXI Master)**
-  - Automatic data movement between FIFO and system memory  
-  - Supports **block read/write with INCR bursts**  
-  - Offloads CPU for large transfers
-
-- **XIP Mode (AXI Slave)**
-  - Execute code directly from external QSPI flash  
-  - Handles fast-read with dummy cycles and optional mode bits  
-  - Transparent AXI read → QSPI transaction translation
-
-- **FIFO Management**
-  - **Separate TX and RX FIFOs** (default 16B depth)  
-  - Exposes **empty/full/level flags** to CSR  
-  - Supports **polling or interrupt-driven** data handling
-
-- **Interrupts and Error Handling**
-  - CMD_DONE, DMA_DONE, FIFO events, and error flags  
-  - **RW1C interrupt status register** for easy software clear  
-  - Detects **FIFO overrun/underrun**, **AXI errors**, and **timeout conditions**
+- **CSR Register Bank** (APB slave) – configuration, status, and interrupt handling.
+- **Command Engine (CE)** – executes programmable commands.
+- **DMA Engine** – AXI master for block transfers.
+- **XIP Engine** – AXI slave to support memory-mapped flash access.
+- **QSPI FSM** – manages command/address/data serialization, clocking, CS#, and IO lines.
+- **FIFO Buffers** – TX and RX FIFOs.
 
 ---
 
-## System Architecture
+## Configuration Parameters
 
----
+| Parameter           | Type    | Default | Description                 |
+| ------------------- | ------- | ------- | --------------------------- |
+| DATA_WIDTH          | Integer | 32      | AXI data bus width (32/64). |
+| AXI_ADDR_WIDTH      | Integer | 32      | AXI address width.          |
+| FIFO_DEPTH          | Integer | 16      | FIFO depth in bytes.        |
+| SUPPORT_XIP_WRITE   | Boolean | False   | Enable write in XIP mode.   |
+| SUPPORT_HOLD_WP     | Boolean | False   | Enable HOLD# and WP# pins.  |
+| MAX_BURST_LEN       | Integer | 16      | Max AXI burst length.       |
+| APB_ADDR_WIDTH      | Integer | 12      | APB address width (4KB).    |
+
+--- 
 
 ## Interface Description
 
-### 1. APB Slave Interface (Configuration & Control)
-The APB slave interface is used for **configuration and status monitoring** of the QSPI Controller.  
-The CPU or system control block accesses the **Control/Status Registers (CSR)** through APB to:
-- Configure operating modes (SPI/Dual/Quad, XIP, DMA, etc.)
-- Read status flags (BUSY/DONE, FIFO level, errors)
-- Write data into the TX FIFO or read data from the RX FIFO (in non-DMA mode)
+### Clock, Reset, and Interrupt
+
+This interface provides the basic control signals for synchronous operation and system-level event notification. The controller runs on the system clock (`clk`), resets with `rst_n`, and reports status/events through an interrupt line (`irq`).
+
+### APB Slave Interface (Configuration & Control)
+
+The APB slave interface allows the CPU or system controller to configure and monitor the QSPI IP through Control/Status Registers (CSRs). All operation modes, command triggers, and status checks are managed via APB transactions.
 
 | Signal     | Dir    | Width | Description |
 |------------|--------|-------|-------------|
@@ -86,11 +69,9 @@ The CPU or system control block accesses the **Control/Status Registers (CSR)** 
 | `pready`   | Output | 1     | APB ready response |
 | `pslverr`  | Output | 1     | APB slave error |
 
----
+### AXI4 Master Interface (DMA Transfers)
 
-### 2. AXI4 Master Interface (DMA Transfers)
-The AXI4 master interface enables the QSPI Controller to **directly access system memory (e.g., DRAM)** for large block transfers via the internal DMA engine.  
-This offloads the CPU by handling high-throughput data movement with burst support for optimal bandwidth.
+The AXI4 master interface is used for high-speed data block transfers between the QSPI flash and system memory (e.g., DRAM). The controller autonomously generates AXI4 transactions for read/write, minimizing CPU overhead.
 
 | Signal           | Dir    | Width | Description |
 |------------------|--------|-------|-------------|
@@ -122,11 +103,9 @@ This offloads the CPU by handling high-throughput data movement with burst suppo
 | `m_axi_rvalid`   | Input  | 1     | Read data valid |
 | `m_axi_rready`   | Output | 1     | Read data ready |
 
----
+### AXI4 Slave Interface (XIP Mode)
 
-### 3. AXI4 Slave Interface (XIP Mode)
-The AXI4 slave interface allows the CPU or system bus masters to **execute code directly from external QSPI flash** (XIP mode) or read data in a memory-mapped fashion.  
-The controller translates AXI read requests into QSPI transactions transparently.
+The AXI4 slave interface enables **Execute-In-Place (XIP)** functionality, where the system processor can directly fetch instructions or access data from flash memory as if it were regular memory-mapped space.
 
 | Signal          | Dir    | Width | Description |
 |-----------------|--------|-------|-------------|
@@ -144,11 +123,9 @@ The controller translates AXI read requests into QSPI transactions transparently
 | `s_axi_rvalid`  | Output | 1     | Read data valid |
 | `s_axi_rready`  | Input  | 1     | Read data ready |
 
----
+### QSPI Flash Interface
 
-### 4. QSPI Flash Interface
-This interface connects directly to the external QSPI NOR flash device.  
-It supports **single, dual, and quad data lines** for command, address, and data phases.
+This is the physical interface connecting directly to the external QSPI flash device. It includes the serial clock (`sclk`), chip select (`cs_n`), data lines (`io0–io3`), and optional control pins (`hold_n`, `wp_n`). It supports standard, dual, and quad modes for flexible performance trade-offs.
 
 | Signal       | Dir   | Width | Description |
 |--------------|-------|-------|-------------|
@@ -235,9 +212,7 @@ The QSPI Controller register map provides access to control, status, DMA, XIP, a
 |        |            | 2      | UNDERRUN          | RO     | TX FIFO underrun                                   | -       |
 |        |            | 3      | AXI_ERR           | RO     | AXI bus error                                      | -       |
 
-
 **Notes:**
-
 - **RO**: Read-Only  
 - **WO**: Write-Only  
 - **RW**: Read/Write  
@@ -248,22 +223,10 @@ The QSPI Controller register map provides access to control, status, DMA, XIP, a
 
 ## Typical Operation
 
-The QSPI Controller operates through several modes depending on system requirements:
-
-1. **Register Configuration (APB Interface)**  
-   - The CPU configures the controller via the APB slave interface.  
-   - Control registers define the flash command, addressing mode, data width (1/2/4 lines), clock frequency, and DMA/XIP enable.  
-
-2. **Command Execution**  
-   - In **manual mode**, the CPU issues a command (e.g., READ, PAGE PROGRAM, ERASE) and transfers data via the APB data registers or FIFOs.  
-   - In **DMA mode**, the DMA engine uses the AXI4 master interface to fetch/store data directly to/from system memory without CPU intervention.
-
-3. **Execute-In-Place (XIP)**  
-   - In XIP mode, the AXI4 slave interface exposes the QSPI flash as a memory-mapped region to the CPU or other masters.  
-   - Instruction fetches and data reads are transparently converted into QSPI transactions.
-
-4. **Interrupt Handling**  
-   - The controller can signal completion, errors, or FIFO thresholds via the `irq` output, allowing event-driven firmware operation.
+- **Command Mode**: CPU sets command registers via APB, triggers execution. Data via FIFO or DMA.
+- **DMA Mode**: DMA engine transfers data blocks via AXI master.
+- **XIP Mode**: CPU fetches instructions/data directly from flash via AXI slave.
+- **Interrupts**: signals completion, FIFO events, or errors.
 
 ---
 
@@ -284,6 +247,45 @@ The QSPI Controller operates through several modes depending on system requireme
     └── tb_qspi_controller_ip.v
  
 ```
+---
+
+## Build & Simulation Guide
+
+### Prerequisites
+
+- Verilog simulator (Icarus, Verilator, ModelSim, or VCS).
+- GTKWave for waveform viewing (optional).
+
+### Run Simulation
+
+```bash
+make run
+make wave
+```
+
+---
+
+## Verification
+
+Testbench includes:
+
+- Basic command mode tests (read/write/erase).
+
+- DMA transfer validation.
+
+- XIP memory-mapped read test.
+
+- FIFO functionality tests.
+
+---
+
+## Limitations
+
+- Current version does not support XIP write (requires SUPPORT_XIP_WRITE = 1).
+
+- Limited AXI burst length (default max 16).
+
+- Advanced power management features may be simplified.
 
 ---
 
@@ -291,6 +293,7 @@ The QSPI Controller operates through several modes depending on system requireme
 
 - **Bảo Tính Nguyễn** – RTL Developer – [nbtinh2002@gmail.com](mailto:nbtinh2002@gmail.com)  
 - **Mr. Quang Le** – Technical Support  
+- **Thái Hải Đăng** – Project Collaborator / Support  
 - **VNCHIP TRAINING PROGRAM 2025 – Final Lab**
 ## License
 
