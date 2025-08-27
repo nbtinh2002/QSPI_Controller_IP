@@ -112,12 +112,12 @@ always @(posedge qspi_sclk or posedge qspi_cs_n) begin
                             status_reg[1] <= 0;
                             state <= ST_IDLE;
                         end
-                        8'h03, 8'h0B, 8'h3B, 8'h6B, 8'hEB: begin// READ DATA
+                        8'h03, 8'h0B, 8'hBB, 8'h6B, 8'hEB: begin// READ DATA
                             state <= ST_ADDR;
                             addr_reg <= 0;
                             shift_in <= 0;
                             lanes <= (nxt_cmd_reg == 8'h03 || nxt_cmd_reg == 8'h0B) ? 1 : 
-															 (nxt_cmd_reg == 8'h3B) ? 2 : 4;
+															 (nxt_cmd_reg == 8'hBB) ? 2 : 4;
                             dummy_cycles <= (nxt_cmd_reg == 8'h03) ? 0 : 
 											(nxt_cmd_reg == 8'hEB  ? 6 : 8);
                         end
