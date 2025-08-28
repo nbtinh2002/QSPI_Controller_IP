@@ -55,7 +55,6 @@ initial begin
     // Test Single Lane Read (0x03, no dummy)
     $display("Testing Single Lane Read (0x03, no dummy)");
     send_command(8'h03, 24'h000000, 1, 1, 0, 1, 0, 1); // has_addr=1
-            //cmd; addr;cmd_lanes; addr_lanes; dummy; data_lanes; data_len; has_addr;
             
     read_data(1, 4); // data_lanes=1, read 4 bytes
     qspi_cs_n = 1;
@@ -90,7 +89,7 @@ initial begin
    	read_data(2, 4);
    	qspi_cs_n = 1;
    	#10;
-
+            
    // Test Quad Lane Read (0x6B, dummy 8, addr/data quad)
    $display("Testing Quad Lane Read (0x6B, dummy 8, addr/data quad)");
    send_command(8'h6B, 24'h000000, 1, 4, 8, 4, 0, 1);

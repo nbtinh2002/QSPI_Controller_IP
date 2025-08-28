@@ -353,7 +353,7 @@ module qspi_fsm #(
 				case(n_data_lanes)
 				3'd1: rx_started <= (!rx_started && (rx_bit_count + n_data_lanes) >= 4'd8 ) ? 1'b1 : 1'b0;
 				3'd2: rx_started <= (!rx_started && rx_bit_count==4'd4 ) ? 1'b1 : 1'b0;
-				3'd4: rx_started <= (!rx_started && rx_bit_count==4'd0 ) ? 1'b1 : 1'b0;
+				3'd4: rx_started <= (!rx_started && (rx_bit_count + n_data_lanes) >= 4'd8 ) ? 1'b1 : 1'b0;
 				default:;
 				endcase
 			end else if (next_state==DATA) begin
@@ -374,7 +374,7 @@ module qspi_fsm #(
 			3'd2: if ((rx_bit_count + n_data_lanes) >= 4'd8 && rx_started && !rx_full) begin
 				rx_data_fifo <= lsb_first ? bit_reverse8({rx_shift_reg[5:0], io_in[1:0]}) : {rx_shift_reg[5:0], io_in[1:0]};
 			end
-			3'd4: if ((rx_bit_count + n_data_lanes) >= 4'd8 && rx_started && !rx_full) begin
+			3'd4: if ((rx_bit_count == 4'd0) && rx_started && !rx_full) begin
 				rx_data_fifo <= lsb_first ? bit_reverse8({rx_shift_reg[3:0], io_in[3:0]}) : {rx_shift_reg[3:0], io_in[3:0]};
 			end
 			endcase
