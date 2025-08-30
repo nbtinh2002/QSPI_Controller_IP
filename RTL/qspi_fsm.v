@@ -94,26 +94,16 @@ module qspi_fsm #(
 
 	reg [2:0] state, next_state;
 	
-	reg [5:0] bits_sent, bits_cnt;
-    reg [31:0] byte_cnt; 
+	reg [5:0] bits_sent, bits_cnt, byte_cnt;
     reg [7:0] dummy_cnt; 
 
 	wire [7:0] total_dummy_cycles = {4'd0,dummy_cycles} + cmd_extra_dummy;
-	wire [5:0] addr_bits_need = (addr_bytes==2'd1) ? 6'd24 : 
-								(addr_bytes==2'd2) ? 6'd32 : 6'd0;
+	wire [5:0] addr_bits_need = (addr_bytes==2'd1) ? 6'd24 : (addr_bytes==2'd2) ? 6'd32 : 6'd0;
 
-	// CMD lanes
-	wire [2:0] n_cmd_lanes  = (cmd_lanes==2'd0) ? 3'd1 : 
-							  (cmd_lanes==2'd1) ? 3'd2 : 
-							  (cmd_lanes==2'd2) ? (quad_en ? 3'd4 : 3'd1) : 3'd1;
-	// ADDR lanes
-	wire [2:0] n_addr_lanes = (addr_lanes==2'd0) ? 3'd1 : 
-							  (addr_lanes==2'd1) ? 3'd2 : 
-							  (addr_lanes==2'd2) ? (quad_en ? 3'd4 : 3'd1) : 3'd1;
-	// DATA lanes
-	wire [2:0] n_data_lanes = (data_lanes==2'd0) ? 3'd1 : 
-							  (data_lanes==2'd1) ? 3'd2 : 
-							  (data_lanes==2'd2) ? (quad_en ? 3'd4 : 3'd1) : 3'd1;
+	wire [2:0] n_cmd_lanes  = 3'd1;
+	wire [2:0] n_addr_lanes = (addr_lanes==2'd0) ? 3'd1 : (addr_lanes==2'd1) ? 3'd2 : (addr_lanes==2'd2) ? (quad_en ? 3'd4 : 3'd0) : 3'd0;
+	wire [2:0] n_data_lanes = (data_lanes==2'd0) ? 3'd1 : (data_lanes==2'd1) ? 3'd2 : (data_lanes==2'd2) ? (quad_en ? 3'd4 : 3'd0) : 3'd0;
+
    	//===========================================================================================//
 	// STATE MACHINE
 	//===========================================================================================//
@@ -139,7 +129,7 @@ module qspi_fsm #(
 			else next_state = CMD;
 		end
 		ADDR: begin
-			if(bits_sent >= addr_bits_need-1) begin
+			if(bits_sent >= addr_bits_need-1|| (bits_sent >= 6'd20 && cmd_opcode == 8'h38)) begin
 				if(mode_en) 							next_state = MODE;
 				else if(total_dummy_cycles!=0) 			next_state = DUMMY;
 				else if(cmd_len!=0) 					next_state = DATA;
@@ -240,103 +230,125 @@ module qspi_fsm #(
     	input [7:0] din;
     	integer i;
     	begin
-        	for (i=0; i<8; i=i+1)
-        	    bit_reverse8[i] = din[7-i];
+        	for (i=0; i<8; i=i+1) bit_reverse8[i] = din[7-i];
     	end
 	endfunction
-	function [32:0] bit_reverse32;
+	function [23:0] bit_reverse24;
+		input [23:0] din;
+		integer i;
+		begin
+			for (i=0; i<24; i=i+1) bit_reverse24[i] = din[23-i];
+		end
+	endfunction
+	
+	function [31:0] bit_reverse32;
 		input [31:0] din;
 		integer i;
 		begin
-			for (i = 0; i < 32; i = i + 1)
-				bit_reverse32[i] = din[31-i];
+			for (i=0; i<32; i=i+1) bit_reverse32[i] = din[31-i];
 		end
 	endfunction
 
 	reg [7:0] 	cmd_shift_reg;
-	reg [31:0]	addr_shift_reg;
+	reg [31:0]	addr32_shift_reg;
+	reg [23:0]	addr24_shift_reg;
 	reg [7:0] 	mode_shift_reg;
 	reg [7:0] 	tx_shift_reg;
-	reg       	tx_shift_valid, tx_ren_latch;
+	reg       	tx_ren_latch;
 
 	reg [7:0] 	rx_shift_reg;
 	reg [3:0] 	rx_bit_count;
 	reg			rx_started;
 
+	wire tx_shift_valid = tx_ren_latch ? 1'b1 : next_state==STOP_CS ? 1'b0 : tx_shift_valid;
 	wire stall_tx = (state==DATA) && (cmd_dir==1'b0) && (!tx_shift_valid);
-	wire stall_rx = (state==DATA) && (cmd_dir==1'b1) && (rx_full) && ((rx_bit_count+n_data_lanes)>=6'd8);
+	wire stall_rx = (state==DATA) && (cmd_dir==1'b1) && rx_full && ((rx_bit_count+n_data_lanes)>=6'd8);
 	wire eff_sample = edge_sample && (!(stall_tx || stall_rx));
 	wire eff_shift = edge_shift && (!(stall_tx || stall_rx));
 
 	// Write phase
 	always @(posedge sclk or negedge qresetn) begin 
 		if(!qresetn) begin
-			cmd_shift_reg	<=  8'h0;
-        	addr_shift_reg	<= 32'h0;
-        	mode_shift_reg	<=  8'h0;
+			cmd_shift_reg		<=  8'h0;
+        	addr32_shift_reg	<= 32'h0;
+			addr24_shift_reg	<= 32'h0;
+        	mode_shift_reg		<=  8'h0;
+			tx_shift_reg    	<= 	8'h0;
+			tx_ren				<=  1'b0;
+			tx_ren_latch		<=  1'b0;
 		end else begin
-			if(state != next_state) begin // Load data
-				case (next_state)
-				CMD:   	cmd_shift_reg  <= lsb_first ? bit_reverse8(cmd_opcode) : cmd_opcode;
-				ADDR:	addr_shift_reg <= lsb_first ? (addr_bits_need == 24 ? bit_reverse32({8'h00, cmd_addr[23:0]}) : bit_reverse32(cmd_addr)) 
-													: (addr_bits_need == 24 ? {cmd_addr[23:0], 8'h00} : cmd_addr );
-				MODE: 	mode_shift_reg <= lsb_first ? bit_reverse8(mode_bits) : mode_bits;
-				default:;
-				endcase
-			end
-			if (eff_shift) begin // Shift data to DEVICE
-				case (state)
-				CMD:case(n_cmd_lanes)
-					3'd1: cmd_shift_reg  <= {cmd_shift_reg[6:0],1'b0};
-					3'd2: cmd_shift_reg  <= {cmd_shift_reg[5:0],2'b00};
-					3'd4: cmd_shift_reg  <= {cmd_shift_reg[3:0],4'b0000};
-					endcase
-				ADDR:case(n_addr_lanes)
-					3'd1: addr_shift_reg <= {addr_shift_reg[30:0],1'b0};
-					3'd2: addr_shift_reg <= {addr_shift_reg[29:0],2'b00};
-					3'd4: addr_shift_reg <= {addr_shift_reg[27:0],4'b0000};
-					endcase
-				MODE:case(n_addr_lanes)
-					3'd1: mode_shift_reg <= {mode_shift_reg[6:0],1'b0};
-					3'd2: mode_shift_reg <= {mode_shift_reg[5:0],2'b00};
-					3'd4: mode_shift_reg <= {mode_shift_reg[3:0],4'b0000};
-					endcase
-				endcase
-			end
-		end
-	end
 
-	always @(posedge sclk or negedge qresetn) begin
-		if(!qresetn) begin
-			tx_shift_reg    <= 	8'h0;
-        	tx_shift_valid 	<= 	1'b0;
-			tx_ren			<=  1'b0;
-			tx_ren_latch	<=  1'b0;
-		end else begin
-			if(bits_cnt==0&&state==DATA) begin
-				tx_shift_reg <= {tx_data_fifo[6:0], 1'b0};
-			end
-			if((state==CMD && bits_cnt==6)|| (state==DATA && !tx_empty && bits_cnt+n_data_lanes==7)) begin
-				tx_ren			<= 1'b1;
-				tx_ren_latch	<= 1'b1;
-			end else begin
-				tx_ren			<= 1'b0;
-			end
-			if(tx_ren_latch) begin
-				tx_shift_valid  <= 1'b1;
-			end else if(state==IDLE) begin
-				tx_shift_valid <= 1'b0;
+			// Load when change state
+			if(state != next_state) begin
+				case(next_state)
+					CMD: cmd_shift_reg <= lsb_first ? bit_reverse8(cmd_opcode) : cmd_opcode;
+
+					ADDR:if(addr_bits_need == 24) begin
+							addr24_shift_reg <= lsb_first ? bit_reverse24(cmd_addr[23:0]) : cmd_addr[23:0];
+						 end else begin
+							addr32_shift_reg <= lsb_first ? bit_reverse32(cmd_addr) : cmd_addr;
+						 end
+					MODE: mode_shift_reg <= lsb_first ? bit_reverse8(mode_bits) : mode_bits;
+
+					DATA:if(cmd_dir==1'b0) begin
+							tx_shift_reg   <= lsb_first ? bit_reverse8(tx_data_fifo) : tx_data_fifo;
+							tx_ren_latch   <= 1'b0;
+						 end
+				endcase
 			end
 			
-			if (eff_shift) begin // Shift data to DEVICE
+			// FIFO read control
+			if(state==ADDR && bits_cnt==6'd0 && !cmd_dir && !tx_empty) begin
+				tx_ren			<= 1'b1;
+				tx_ren_latch	<= 1'b1;
+			end else if(state!=DATA && next_state==DATA && n_data_lanes==3'd4) begin
+				tx_ren			<= 1'b1;
+				//tx_ren_latch	<= 1'b1;
+			end else if(state==DATA && !tx_empty) begin
+					case(n_data_lanes)
+					3'd1: tx_ren <= (bits_cnt==5) ? 1'b1 : 1'b0;
+					3'd2: tx_ren <= (bits_cnt==4) ? 1'b1 : 1'b0;
+					3'd4: tx_ren <= (bits_cnt==4) ? 1'b1 : 1'b0;
+					default: tx_ren <= 1'b0;
+					endcase
+			end else begin
+				tx_ren <= 1'b0;
+			end
+
+			// Shift data 
+			if (eff_shift) begin
 				case (state)
-				DATA:if(cmd_dir==1'b0&&bits_cnt!=0) begin
-						case(n_data_lanes)
-						3'd1: tx_shift_reg <= {tx_shift_reg[6:0],1'b0};
-						3'd2: tx_shift_reg <= {tx_shift_reg[5:0],2'b00};
-						3'd4: tx_shift_reg <= {tx_shift_reg[3:0],4'b0000};
+					CMD: begin
+						case(n_cmd_lanes)
+							3'd1: cmd_shift_reg  <= {cmd_shift_reg[6:0],1'b0};
+							3'd2: cmd_shift_reg  <= {cmd_shift_reg[5:0],2'b00};
+							3'd4: cmd_shift_reg  <= {cmd_shift_reg[3:0],4'b0000};
 						endcase
-					 end
+					end
+					ADDR: begin
+						case(n_addr_lanes)
+							3'd1: addr24_shift_reg <= (addr_bits_need == 24) ? {addr24_shift_reg[22:0],1'b0}   : {addr32_shift_reg[30:0],1'b0};
+							3'd2: addr24_shift_reg <= (addr_bits_need == 24) ? {addr24_shift_reg[21:0],2'b00}  : {addr32_shift_reg[29:0],2'b00};
+							3'd4: addr24_shift_reg <= (addr_bits_need == 24) ? {addr24_shift_reg[19:0],4'b0000}: {addr32_shift_reg[27:0],4'b0000};
+						endcase
+					end
+					MODE: begin
+						case(n_addr_lanes)
+							3'd1: mode_shift_reg <= {mode_shift_reg[6:0],1'b0};
+							3'd2: mode_shift_reg <= {mode_shift_reg[5:0],2'b00};
+							3'd4: mode_shift_reg <= {mode_shift_reg[3:0],4'b0000};
+						endcase
+					end
+					DATA:begin
+						case(n_data_lanes)
+							3'd1: tx_shift_reg <= (bits_cnt==6'd7) ? tx_data_fifo: {tx_shift_reg[6:0],1'b0};
+							3'd2: tx_shift_reg <= (bits_cnt==6'd0) ? tx_data_fifo: {tx_shift_reg[5:0],2'b00};
+							3'd4: begin
+								  if(bits_cnt==6'd4) tx_shift_reg <= lsb_first ? bit_reverse8(tx_data_fifo) : tx_data_fifo;
+								  else tx_shift_reg <= {tx_shift_reg[3:0],4'b0000};
+							end
+						endcase
+					end
 				endcase
 			end
 		end
@@ -394,41 +406,39 @@ module qspi_fsm #(
 	//==========================================================================================//
 	wire [3:0]	io_in = {io3, io2, io1, io0};
 
-	// mux between output and high-z
+	// Mux output vs high-Z
 	assign io0 = io_oe[0] ? io_out[0] : 1'bz;
 	assign io1 = io_oe[1] ? io_out[1] : 1'bz;
 	assign io2 = io_oe[2] ? io_out[2] : 1'bz;
 	assign io3 = io_oe[3] ? io_out[3] : 1'bz;
 
-	// output bit selector 
-	wire [3:0] 	out_bits_cmd = (n_cmd_lanes==3'd1) ? {3'b000, cmd_shift_reg[7]} :
- 							   (n_cmd_lanes==3'd2) ? {2'b00,  cmd_shift_reg[7:6]} : cmd_shift_reg[7:4];
-
-	wire [3:0] 	out_bits_addr = (n_addr_lanes==3'd1) ? {3'b000, addr_shift_reg[30]} :
-							    (n_addr_lanes==3'd2) ? {2'b00,  addr_shift_reg[30:29]} : addr_shift_reg[30:27];
-
-	wire [3:0] 	out_bits_mode = (n_addr_lanes==3'd1) ? {3'b000, mode_shift_reg[7]} :
-    						    (n_addr_lanes==3'd2) ? {2'b00,  mode_shift_reg[7:6]} : mode_shift_reg[7:4];
-
-	wire [3:0] out_bits_dataw = (n_data_lanes==3'd1) ? ((state==DATA&&bits_cnt==0) ? {3'b000, tx_data_fifo[7]} : {3'b000, tx_shift_reg[7]}) :
-    							(n_data_lanes==3'd2) ? ((state==DATA&&bits_cnt==0) ? {2'b00,tx_data_fifo[7:6]} : {2'b00,tx_shift_reg[7:6]}) :
-													   ((state==DATA&&bits_cnt==0) ? tx_data_fifo[7:4]         : tx_shift_reg[7:4]);
-
 	// Lane enable mask
-	wire [3:0] lane_mask = (state==CMD)  				  ? ((n_cmd_lanes==3'd1) ? 4'b0001:(n_cmd_lanes==3'd2) ? 4'b0011 : (quad_en ? 4'b1111 : 4'b0001)):
-    					   (state==ADDR) 				  ? ((n_addr_lanes==3'd1)? 4'b0001:(n_addr_lanes==3'd2)? 4'b0011 : (quad_en ? 4'b1111 : 4'b0001)):
-    					   (state==MODE) 				  ? ((n_addr_lanes==3'd1)? 4'b0001:(n_addr_lanes==3'd2)? 4'b0011 : (quad_en ? 4'b1111 : 4'b0001)):
-    					   (state==DATA && cmd_dir==1'b0) ? ((n_data_lanes==3'd1)? 4'b0001:(n_data_lanes==3'd2)? 4'b0011 : (quad_en ? 4'b1111 : 4'b0001)): 
+	wire [3:0] lane_mask = (state==CMD)               ? 4'b0001:
+    					   (state==ADDR||state==MODE) ? ((n_addr_lanes==3'd1)? 4'b0001:(n_addr_lanes==3'd2)? 4'b0011 : (quad_en ? 4'b1111 : 4'b0001)):
+    					   (state==DATA)              ? ((n_data_lanes==3'd1)? 4'b0001:(n_data_lanes==3'd2)? 4'b0011 : (quad_en ? 4'b1111 : 4'b0001)): 
 						   4'b0000;
-
-	// IO drive logic
-	wire io_drive_en = (state==CMD)||(state==ADDR)||(state==MODE)||(state==DATA&&cmd_dir==1'b0);
-	wire [3:0] io_oe  = io_drive_en ? lane_mask : 4'b0000;
+	// IO drive enable
+	wire       io_drive_en = (state==CMD)||(state==ADDR)||(state==MODE)||(state==DATA && cmd_dir==1'b0);					   
+	wire [3:0] io_oe  = (io_drive_en) ? lane_mask : 4'b0000;
 	wire [3:0] io_out = (io_drive_en) ? ((state==CMD)  ? out_bits_cmd  :
 										 (state==ADDR) ? out_bits_addr :
 										 (state==MODE) ? out_bits_mode :
 										 (state==DATA) ? out_bits_dataw: 4'h0 ) : 4'h0;
 
+	// output bit selector 
+	wire [3:0] 	out_bits_cmd = {3'b000, cmd_shift_reg[7]};
+
+	wire [3:0] out_bits_addr = (addr_bits_need == 24) ? ((n_addr_lanes==3'd1) ? {3'b000, addr24_shift_reg[23]} :
+                                 						 (n_addr_lanes==3'd2) ? {2'b00,  addr24_shift_reg[23:22]} : addr24_shift_reg[23:20]) :
+													    ((n_addr_lanes==3'd1) ? {3'b000, addr32_shift_reg[31]} :
+													     (n_addr_lanes==3'd2) ? {2'b00,  addr32_shift_reg[31:30]} : addr32_shift_reg[31:28]);
+
+	wire [3:0] 	out_bits_mode = (n_addr_lanes==3'd1) ? {3'b000, mode_shift_reg[7]} :
+    						    (n_addr_lanes==3'd2) ? {2'b00,  mode_shift_reg[7:6]} : mode_shift_reg[7:4];
+
+	wire [3:0] out_bits_dataw = (n_data_lanes==3'd1) ? {3'b000, tx_shift_reg[7]} :
+								(n_data_lanes==3'd2) ? {2'b00,  tx_shift_reg[7:6]} : tx_shift_reg[7:4];
+	
 	//==========================================================================================//
 	// COUNTER
 	//==========================================================================================//
@@ -437,12 +447,12 @@ module qspi_fsm #(
 		if (!qresetn) begin
 			bits_sent <= 6'd0;
 			bits_cnt  <= 6'd0;
+			byte_cnt  <= 6'd0;
 		end else if (state != next_state) begin
-			// Reset counters on state transition
 			bits_sent <= 6'd0;
 			bits_cnt  <= 6'd0;
+			byte_cnt  <= 6'd0;
 		end else begin
-			// Update counters based on current state and eff_shift
 			case(state)
 			CMD:  if (eff_shift) begin
 				bits_sent <= bits_sent + n_cmd_lanes;
@@ -456,27 +466,19 @@ module qspi_fsm #(
 				bits_sent <= bits_sent + n_addr_lanes;
 				bits_cnt  <= bits_cnt + n_addr_lanes;
 			end
-			DATA: if (eff_shift) begin
-				bits_sent <= bits_sent + n_data_lanes;
-				bits_cnt  <= bits_cnt + n_data_lanes;
+			DATA: begin
+				if (eff_shift) begin
+					bits_sent <= bits_sent + n_data_lanes;
+					bits_cnt  <= bits_cnt + n_data_lanes;
+					byte_cnt  <= (bits_cnt+n_data_lanes>=6'd8) ? byte_cnt + 6'd1 : byte_cnt;
+				end
+				if( bits_cnt+n_data_lanes>=6'd8) bits_cnt <= 0;
 			end
 			default:;
 			endcase
-			if( bits_cnt+n_data_lanes>=6'd8) bits_cnt <= 0;
 		end
 	end
-	
-	// byte_cnt
-    always @(posedge qclk or negedge qresetn) begin
-		if(!qresetn) begin
-			byte_cnt <= 32'd0;
-        end else if(state!=DATA) begin
-			byte_cnt <= 32'd0;
-        end else if(state==DATA&&eff_shift&&(bits_cnt+n_data_lanes>=6'd8)) begin
-            byte_cnt <= byte_cnt + 1;
-		end 
-	end
-    
+	    
 	// dummy_cnt
     always @(posedge qclk or negedge qresetn) begin
         if(!qresetn) begin
