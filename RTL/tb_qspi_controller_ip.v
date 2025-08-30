@@ -6,6 +6,7 @@ module tb_qspi_controller_ip;
     reg clk, rst_n;
     
     //APB signals
+    wire [7:0]  apb_paddr;
     wire        psel, penable, pwrite;
     wire [11:0] paddr = {4'b0000, apb_paddr}; 
     wire [31:0] pwdata, prdata;
@@ -15,7 +16,7 @@ module tb_qspi_controller_ip;
     reg  [31:0] apb_wdata;
     wire [31:0] apb_rdata;
     wire        apb_idle, apb_busy;
-    wire [7:0]  apb_paddr;
+
 
     // QSPI bus & IRQ
     wire        sclk, cs_n, hold_n, wp_n;
@@ -176,25 +177,25 @@ module tb_qspi_controller_ip;
         // Prepare data to test read: load new data -> write -> readback
         send_cmd(32'h0000_0000, 32'h0000_0006, 32'h0000_000, 32'h0000_0000, 32'h0000_0000, 32'h0000_0001);// Write Enable before write data
         apb_write(8'h44, 32'hDEADBEEF);// Write data to TX FIFO (FSM will push to device)
-        send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        $display("0 %0h", flash_model.addr_reg);
+        send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0001, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         for(i=0;i<10;i=i+1) 
-            $display("%0d: %0h",i, flash_model.memory[i]);
+
+            $display("%0d: addr %0h, data %0h",i,flash_model.addr_reg, flash_model.memory[i]);
 
         $display("\n   Single Read Mode(0x03) (1-1-1)(has addr/len, no dummy)");
-        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
+        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0001, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
-
+        $display("%0d: addr %0h, data %0h",i,flash_model.addr_reg, flash_model.memory[i]);
         $display("\n   2xIO Read Mode(0xBB) (1-2-2)(has addr/len, dummy 8)");
-        send_cmd(32'h0000_3054, 32'h0000_00BB, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
+        send_cmd(32'h0000_3054, 32'h0000_00BB, 32'h0000_0001, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
         $display("\n   4xIO Read Mode(0xEB) (1-4-4)(has addr/len, dummy 8)");
-        send_cmd(32'h0000_3068, 32'h0000_00EB, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0005);
+        send_cmd(32'h0000_3068, 32'h0000_00EB, 32'h0000_0001, 32'h0000_0004, 32'h0000_0000, 32'h0000_0005);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
         $display("\n   Fast Single Read Mode(0x0B) (1-1-1)(has addr/len, dummy 8)");
-        send_cmd(32'h0000_3040, 32'h0000_000B, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
+        send_cmd(32'h0000_3040, 32'h0000_000B, 32'h0000_0001, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
 /*      $display("\n   Dual Read Mode(0x3B) (1-1-2)(has addr/len, dummy 8)");
@@ -249,7 +250,7 @@ module tb_qspi_controller_ip;
         
         $display("\n   Chip Erase(0xC7) (All)");
         // Prepare data to test erase: load new data -> write -> readback
-        apb_write(8'h44, 32'hABCCDDCBA);
+        apb_write(8'h44, 32'hAADDCC);
         send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         $write("       OLD DATA:"); apb_read(8'h48, 1, 0,0); 
