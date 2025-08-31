@@ -99,7 +99,7 @@ module qspi_controller_ip
 	// CE
 	qspi_ce qspi_ce_inst(
 		.clk(clk), .resetn(resetn), 
-		.enable(enable), .cmd_trigger(cmd_trigger), .dma_en(),
+		.enable(enable), .cmd_trigger(cmd_trigger), .dma_en(dma_en),
 		.qspi_done(qspi_done), .dma_done(),
 		.ce_start(ce_start), .dma_start(),
 		.ce_busy(ce_busy), .ce_done(ce_done)
@@ -108,17 +108,17 @@ module qspi_controller_ip
 	qspi_tx_fifo #(.FIFO_DEPTH(FIFO_DEPTH)) tx_fifo_inst ( 
 		.clk(clk), .resetn(resetn), 
 		.data_in(tx_data), .data_out(tx_data_fifo), 
-		.fifo_wen(tx_wen),.fifo_ren(tx_ren),
-		.fifo_full(tx_full),.fifo_empty(tx_empty), 
-		.fifo_level(tx_level)
+		.tx_wen(tx_wen),.tx_ren(tx_ren),
+		.tx_full(tx_full),.tx_empty(tx_empty), 
+		.tx_level(tx_level)
 	);
 	// RX FIFO
 	qspi_rx_fifo #(.FIFO_DEPTH(FIFO_DEPTH)) rx_fifo_inst (
 		.clk(clk), .resetn(resetn), 
 		.data_in(rx_data_fifo), .data_out(rx_data), 
-		.fifo_wen(rx_wen),.fifo_ren(rx_ren),
-		.fifo_full(rx_full),.fifo_empty(rx_empty), 
-		.fifo_level(rx_level)
+		.rx_wen(rx_wen),.rx_ren(rx_ren),
+		.rx_full(rx_full),.rx_empty(rx_empty), 
+		.rx_level(rx_level)
 	);
 		// QSPI FSM
 	qspi_fsm #(.SUPPORT_HOLD_UP(SUPPORT_HOLD_UP)) fsm_inst(

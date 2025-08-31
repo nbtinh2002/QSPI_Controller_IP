@@ -5,16 +5,16 @@ module qspi_tx_fifo #(
     input  wire        resetn,
 
     // Write side (CPU -> FIFO)
-    input  wire        fifo_wen,
+    input  wire        tx_wen,
     input  wire [31:0] data_in,
-    output wire        fifo_full,
+    output wire        tx_full,
 
     // Read side (FIFO -> QSPI)
-    input  wire        fifo_ren,
+    input  wire        tx_ren,
     output reg  [7:0]  data_out,
-    output wire        fifo_empty,
+    output wire        tx_empty,
 
-    output reg  [3:0]  fifo_level
+    output reg  [3:0]  tx_level
 );
 
     function integer log2;
@@ -30,20 +30,20 @@ module qspi_tx_fifo #(
     reg [7:0] mem [0:FIFO_DEPTH-1];
     reg [log2(FIFO_DEPTH)-1:0] wr_ptr, rd_ptr;
 
-    assign fifo_empty = (fifo_level == 0);
-    assign fifo_full  = (fifo_level > (FIFO_DEPTH - 4));
+    assign tx_empty = (tx_level == 0);
+    assign tx_full  = (tx_level > (FIFO_DEPTH - 4));
 
     always @(posedge clk or negedge resetn) begin
         if (!resetn) begin
             wr_ptr     <= 0;
-            fifo_level <= 0;
-        end else if (fifo_wen && !fifo_full) begin
+            tx_level <= 0;
+        end else if (tx_wen && !tx_full) begin
             mem[wr_ptr]                        <= data_in[31:24];
             mem[(wr_ptr + 1) & (FIFO_DEPTH-1)] <= data_in[23:16];
             mem[(wr_ptr + 2) & (FIFO_DEPTH-1)] <= data_in[15:8];
             mem[(wr_ptr + 3) & (FIFO_DEPTH-1)] <= data_in[7:0];
             wr_ptr     <= (wr_ptr + 4) & (FIFO_DEPTH-1);
-            fifo_level <= fifo_level + 4;
+            tx_level <= tx_level + 4;
         end
     end
 
@@ -51,10 +51,10 @@ module qspi_tx_fifo #(
         if (!resetn) begin
             rd_ptr   <= 0;
             data_out <= 8'h00;
-        end else if (fifo_ren && !fifo_empty) begin
+        end else if (tx_ren && !tx_empty) begin
             data_out <= mem[rd_ptr];
             rd_ptr   <= (rd_ptr + 1) & (FIFO_DEPTH-1);
-            fifo_level <= fifo_level - 1;
+            tx_level <= tx_level - 1;
         end
     end
 
