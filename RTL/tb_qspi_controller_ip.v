@@ -23,6 +23,44 @@ module tb_qspi_controller_ip;
     wire        io0, io1, io2, io3;
     wire        irq;
 
+    // AXI4 Master Signals
+    wire [3:0]  m_awid;
+    wire [31:0] m_awaddr;
+    wire [7:0]  m_awlen;
+    wire [2:0]  m_awsize; 
+    wire [1:0]  m_awburst;
+    wire        m_awvalid;
+    reg         m_awready;
+
+    wire [31:0] m_wdata;
+    wire [3:0]  m_wstrb;
+    wire        m_wlast;
+    wire        m_wuser;
+    wire        m_wvalid;
+    reg         m_wready;
+
+    reg [3:0]   m_bid;
+    reg [1:0]   m_bresp;
+    reg         m_buser;
+    reg         m_bvalid;
+    wire        m_bready;
+
+    wire [3:0]  m_arid;
+    wire [31:0] m_araddr;
+    wire [7:0]  m_arlen;
+    wire [2:0]  m_arsize;
+    wire [1:0]  m_arburst;
+    wire        m_arvalid;
+    reg         m_arready;
+
+    reg [3:0]   m_rid;
+    reg [31:0]  m_rdata;
+    reg [1:0]   m_rresp;
+    reg         m_rlast;
+    reg         m_ruser;
+    reg         m_rvalid;
+    wire        m_rready;
+
     // DUT Instance
     apb_master apb_m (
         .clk(clk), .rst_n(rst_n),
@@ -41,7 +79,17 @@ module tb_qspi_controller_ip;
         .paddr(paddr), .pwdata(pwdata), .prdata(prdata), 
         .pready(pready), .pslverr(pslverr),
         .sclk(sclk), .cs_n(cs_n),.hold_n(hold_n), .wp_n(wp_n),
-        .io0(io0), .io1(io1), .io2(io2), .io3(io3)
+        .io0(io0), .io1(io1), .io2(io2), .io3(io3),
+        // Write address
+        .m_awvalid(m_awvalid),.m_awaddr (m_awaddr),.m_awready(m_awready),
+        // Write data
+        .m_wvalid(m_wvalid),.m_wdata(m_wdata),.m_wstrb(m_wstrb),.m_wready(m_wready),
+        // Write response
+        .m_bvalid(m_bvalid), .m_bready(m_bready),
+        // Read address
+        .m_arvalid(m_arvalid),.m_araddr(m_araddr),.m_arready(m_arready),
+        // Read data
+        .m_rvalid(m_rvalid),.m_rdata(m_rdata),.m_rready(m_rready)
         );
 
     qspi_device flash_model (
@@ -51,6 +99,20 @@ module tb_qspi_controller_ip;
         .qspi_io1(io1),
         .qspi_io2(io2),
         .qspi_io3(io3)
+    );
+
+      axi4_ram_slave axi4_ram0 (
+        .clk(clk),.rst_n(rst_n),
+        // Write address
+        .awvalid(m_awvalid),.awaddr (m_awaddr),.awready(m_awready),
+        // Write data
+        .wvalid(m_wvalid),.wdata(m_wdata),.wstrb(m_wstrb),.wready(m_wready),
+        // Write response
+        .bvalid(m_bvalid), .bready(m_bready),
+        // Read address
+        .arvalid(m_arvalid),.araddr(m_araddr),.arready(m_arready),
+        // Read data
+        .rvalid(m_rvalid),.rdata(m_rdata),.rready(m_rready)
     );
 
     // Clock generation 
@@ -135,7 +197,28 @@ module tb_qspi_controller_ip;
             wait(dut.qspi_ce_inst.ce_done);
         end
     endtask
+
+    //Send command with DMA
+    task dma_mode;
+        input [32:0] len;
+        input [15:0] addr;
+        begin
+        apb_write(8'h04, 32'h0000_0201);  // CTRL: ENABLE=1 and sel dma
+        apb_write(8'h24, 32'h0000_2040);  // CMD_CFG
+        apb_write(8'h28, 32'h0000_0003);  // CMD_OP
+        apb_write(8'h2C, 32'h0000_0000);  // CMD ADDR
+        apb_write(8'h3C, addr);   //DMA_ADDR need set << 2
+        apb_write(8'h30, len);  // CMD_LEN: 4byte  
+        apb_write(8'h40, len); 
+        apb_write(8'h38, 32'h0000_0030); //bit 4 is read flash to dram, bit 5 count add,
+                                                //axi not suport brust size so default is 1
+        apb_write(8'h04, 32'h0000_0301);    // Enable, DMA_EN, Trigger
+        wait(dut.qspi_ce_inst.ce_done);
+        end
+     endtask
+
     integer i;
+    integer     CNT_ERROR = 0;
     // Test Sequence
     initial begin
         $dumpfile("tb_qspi_controller_ip.vcd");
@@ -143,6 +226,39 @@ module tb_qspi_controller_ip;
 
         wait(rst_n);
         wait(apb_idle); 
+
+        $display("\n======================================================================================");
+        $display("    DMA MODE  TEST RX FIFO");
+        $display("======================================================================================");
+        dma_mode(8, 0);
+        $display("Data got in axi %h", axi4_ram0.mem[0]);
+        $display("Data got in axi %h", axi4_ram0.mem[1]);
+         $display("========== Test dma with 1 byte ==========");
+        dma_mode(9, 0);
+        $display("Data got in axi %h", axi4_ram0.mem[2]);
+
+        $display("========== Test dma with 2 byte ==========");
+        dma_mode(10, 0);
+        $display("Data got in axi %h", axi4_ram0.mem[2]);
+
+        $display("========== Test dma with 3 byte ==========");
+        dma_mode(11, 0);
+        $display("Data got in axi %h", axi4_ram0.mem[2]);
+        $display("========== Test dma with another addr ==========");
+        dma_mode(128, 15'h0AB0); //addr << 2 bit same 2AC
+        for(integer i = 0; i < 32; i=i+1)// 32*4 = 128
+        if(axi4_ram0.mem[16'h02AC + i] !=  {flash_model.memory[i*4], flash_model.memory[i*4+1], 
+                                            flash_model.memory[i*4+2], flash_model.memory[i*4+3]})
+        begin
+             $error("[FAIL] Data got:%h , Data expected:%h", axi4_ram0.mem[16'h02AC + i], 
+             {flash_model.memory[i*4], flash_model.memory[i*4+1], 
+             flash_model.memory[i*4+2], flash_model.memory[i*4+3]});
+             CNT_ERROR = CNT_ERROR + 1'b1;
+        end 
+
+         if(CNT_ERROR == 0)
+            $display("[PASS] All test is passed!");
+        else $error("[FAIL] VALUE NOT MATCH, TOTAL ERROR: %d", CNT_ERROR);
 
         $display("\n======================================================================================");
         $display("    Non_DMA     TEST CASE 0: READ DEVICE INFO");
