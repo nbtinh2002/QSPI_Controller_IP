@@ -33,7 +33,7 @@ module qspi_dma(
 	//csr input for dma
 	input wire[31:0] src_addr_i, len_i,
 	input dma_start_i,// start from ce
-	input [3:0] dma_brust_size_i,
+//	input [3:0] dma_brust_size_i,
 	input dma_incr_addr_i,
 	//connect to fifo
 	//read fifo is write to axi

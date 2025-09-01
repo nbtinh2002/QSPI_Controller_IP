@@ -398,7 +398,7 @@ module qspi_csr
 	assign dma_len_o	= dma_len_reg;
 
 	// FIFO data signals
-	assign tx_data_o	= pwdata;
+	assign tx_data_o = (!tx_full_i && write && (paddr == FIFO_TX_ADDR)) ? pwdata : 32'b0;
 	assign tx_wen_o   	= !tx_full_i  && write && (paddr == FIFO_TX_ADDR);
 	assign rx_ren_o   	= !rx_empty_i && read  && (paddr == FIFO_RX_ADDR);	
 endmodule

@@ -24,40 +24,40 @@ module tb_qspi_controller_ip;
     wire        irq;
 
     // AXI4 Master Signals
-    wire [3:0]  m_awid;
+//    wire [3:0]  m_awid;
     wire [31:0] m_awaddr;
-    wire [7:0]  m_awlen;
-    wire [2:0]  m_awsize; 
-    wire [1:0]  m_awburst;
+//    wire [7:0]  m_awlen;
+//    wire [2:0]  m_awsize; 
+//    wire [1:0]  m_awburst;
     wire        m_awvalid;
     reg         m_awready;
 
     wire [31:0] m_wdata;
     wire [3:0]  m_wstrb;
-    wire        m_wlast;
-    wire        m_wuser;
+//    wire        m_wlast;
+//    wire        m_wuser;
     wire        m_wvalid;
     reg         m_wready;
 
-    reg [3:0]   m_bid;
-    reg [1:0]   m_bresp;
-    reg         m_buser;
+//    reg [3:0]   m_bid;
+//    reg [1:0]   m_bresp;
+//    reg         m_buser;
     reg         m_bvalid;
     wire        m_bready;
 
-    wire [3:0]  m_arid;
+//    wire [3:0]  m_arid;
     wire [31:0] m_araddr;
-    wire [7:0]  m_arlen;
-    wire [2:0]  m_arsize;
-    wire [1:0]  m_arburst;
+//    wire [7:0]  m_arlen;
+//    wire [2:0]  m_arsize;
+//    wire [1:0]  m_arburst;
     wire        m_arvalid;
     reg         m_arready;
 
-    reg [3:0]   m_rid;
+//    reg [3:0]   m_rid;
     reg [31:0]  m_rdata;
-    reg [1:0]   m_rresp;
-    reg         m_rlast;
-    reg         m_ruser;
+//    reg [1:0]   m_rresp;
+//    reg         m_rlast;
+//    reg         m_ruser;
     reg         m_rvalid;
     wire        m_rready;
 
@@ -197,8 +197,7 @@ module tb_qspi_controller_ip;
             wait(dut.qspi_ce_inst.ce_done);
         end
     endtask
-
-    //Send command with DMA
+    
     task dma_mode;
         input [32:0] len;
         input [15:0] addr;
@@ -207,18 +206,52 @@ module tb_qspi_controller_ip;
         apb_write(8'h24, 32'h0000_2040);  // CMD_CFG
         apb_write(8'h28, 32'h0000_0003);  // CMD_OP
         apb_write(8'h2C, 32'h0000_0000);  // CMD ADDR
-        apb_write(8'h3C, addr);   //DMA_ADDR need set << 2
+        apb_write(8'h3C, addr<<2);   //DMA_ADDR need set << 2
         apb_write(8'h30, len);  // CMD_LEN: 4byte  
         apb_write(8'h40, len); 
         apb_write(8'h38, 32'h0000_0030); //bit 4 is read flash to dram, bit 5 count add,
-                                                //axi not suport brust size so default is 1
         apb_write(8'h04, 32'h0000_0301);    // Enable, DMA_EN, Trigger
         wait(dut.qspi_ce_inst.ce_done);
         end
-     endtask
+    endtask
+
+    task dma_testcase;
+        input integer len;
+        input [15:0] addr;
+        integer i, words, remain, bytes_here;
+        reg [31:0] exp, got, mask;
+        bit fail;
+        begin
+            $display("    ...Testing DMA len=%0d bytes, addr=0x%h", len, addr);
+            dma_mode(len, addr);
+            words  = (len+3)/4;
+            remain = len;
+            fail   = 0;
+
+            for (i=0; i<words; i++) begin
+                exp = { flash_model.memory[i*4+3],
+                        flash_model.memory[i*4+2],
+                        flash_model.memory[i*4+1],
+                        flash_model.memory[i*4+0] };
+                got         = axi4_ram0.mem[addr + i];
+                bytes_here  = (remain >= 4) ? 4 : remain;
+                mask        = 32'hFFFFFFFF << ((4 - bytes_here)*8);
+                if ((got & mask) !== (exp & mask)) begin
+                    $error("    ❌ AXI[%0h] got=%08h exp=%08h mask=%08h", addr+i, got, exp, mask);
+                    fail = 1;
+                end else if (len <= 16) begin
+                    $display("    ✅ AXI[%0h] = %08h", addr+i, got & mask);
+                end
+                remain -= bytes_here;
+            end
+            if (!fail && len > 16) 
+                $display("    ✅ All %0d words matched", words);
+        end
+    endtask
 
     integer i;
-    integer     CNT_ERROR = 0;
+    integer CNT_ERROR = 0;
+
     // Test Sequence
     initial begin
         $dumpfile("tb_qspi_controller_ip.vcd");
@@ -226,39 +259,9 @@ module tb_qspi_controller_ip;
 
         wait(rst_n);
         wait(apb_idle); 
-
-        $display("\n======================================================================================");
-        $display("    DMA MODE  TEST RX FIFO");
-        $display("======================================================================================");
-        dma_mode(8, 0);
-        $display("Data got in axi %h", axi4_ram0.mem[0]);
-        $display("Data got in axi %h", axi4_ram0.mem[1]);
-         $display("========== Test dma with 1 byte ==========");
-        dma_mode(9, 0);
-        $display("Data got in axi %h", axi4_ram0.mem[2]);
-
-        $display("========== Test dma with 2 byte ==========");
-        dma_mode(10, 0);
-        $display("Data got in axi %h", axi4_ram0.mem[2]);
-
-        $display("========== Test dma with 3 byte ==========");
-        dma_mode(11, 0);
-        $display("Data got in axi %h", axi4_ram0.mem[2]);
-        $display("========== Test dma with another addr ==========");
-        dma_mode(128, 15'h0AB0); //addr << 2 bit same 2AC
-        for(integer i = 0; i < 32; i=i+1)// 32*4 = 128
-        if(axi4_ram0.mem[16'h02AC + i] !=  {flash_model.memory[i*4], flash_model.memory[i*4+1], 
-                                            flash_model.memory[i*4+2], flash_model.memory[i*4+3]})
-        begin
-             $error("[FAIL] Data got:%h , Data expected:%h", axi4_ram0.mem[16'h02AC + i], 
-             {flash_model.memory[i*4], flash_model.memory[i*4+1], 
-             flash_model.memory[i*4+2], flash_model.memory[i*4+3]});
-             CNT_ERROR = CNT_ERROR + 1'b1;
-        end 
-
-         if(CNT_ERROR == 0)
-            $display("[PASS] All test is passed!");
-        else $error("[FAIL] VALUE NOT MATCH, TOTAL ERROR: %d", CNT_ERROR);
+        // use code to read memory in flash_device
+        //    for(i=0;i<10;i=i+1) 
+        //      $display("%0d: addr %0h, data %0h",i,flash_model.addr_reg, flash_model.memory[i]);
 
         $display("\n======================================================================================");
         $display("    Non_DMA     TEST CASE 0: READ DEVICE INFO");
@@ -294,14 +297,13 @@ module tb_qspi_controller_ip;
         send_cmd(32'h0000_0000, 32'h0000_0006, 32'h0000_000, 32'h0000_0000, 32'h0000_0000, 32'h0000_0001);// Write Enable before write data
         apb_write(8'h44, 32'hDEADBEEF);// Write data to TX FIFO (FSM will push to device)
         send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0001, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        for(i=0;i<10;i=i+1) 
-
-            $display("%0d: addr %0h, data %0h",i,flash_model.addr_reg, flash_model.memory[i]);
 
         $display("\n   Single Read Mode(0x03) (1-1-1)(has addr/len, no dummy)");
         send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0001, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
-        $display("%0d: addr %0h, data %0h",i,flash_model.addr_reg, flash_model.memory[i]);
+
+      //  $display("%0d: addr %0h, data %0h",i,flash_model.addr_reg, flash_model.memory[i]);
+
         $display("\n   2xIO Read Mode(0xBB) (1-2-2)(has addr/len, dummy 8)");
         send_cmd(32'h0000_3054, 32'h0000_00BB, 32'h0000_0001, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
@@ -322,7 +324,10 @@ module tb_qspi_controller_ip;
         send_cmd(32'h0000_3060, 32'h0000_006B, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0005);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 */
-
+        $display("\n   Fast Read (0x0B) dummy=12 (extra dummy)");
+        send_cmd(32'h0000_3040, 32'h0000_000B, 32'h0000_0000, 32'h0000_0004, 32'h0000_000C, 32'h0000_0001);
+        apb_read(8'h48, 1, 32'hDEADBEEF, 1);
+        //cfg - op - addr - len - dummy - ctrl
         $display("\n======================================================================================");
         $display("    Non_DMA     TEST CASE 3: WRITE DATA");
         $display("======================================================================================");
@@ -373,6 +378,68 @@ module tb_qspi_controller_ip;
         send_cmd(32'h0000_0040, 32'h0000_00C7, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);// Verify by readback
         apb_read(8'h48, 1, 32'hFFFF_FFFF,1); // expect 0xFFFFFFFF
+
+        $display("\n======================================================================================");
+        $display("    DMA     TEST CASE 5: COMMAND MODE WITH DMA");
+        $display("======================================================================================");
+
+/*
+        dma_mode(8, 0);
+        $display("Data got in axi %h", axi4_ram0.mem[0]);
+        $display("Data got in axi %h", axi4_ram0.mem[1]);
+         $display("========== Test dma with 1 byte ==========");
+        dma_mode(9, 0);
+        $display("Data got in axi %h", axi4_ram0.mem[2]);
+
+        $display("========== Test dma with 2 byte ==========");
+        dma_mode(10, 0);
+        $display("Data got in axi %h", axi4_ram0.mem[2]);
+
+        $display("========== Test dma with 3 byte ==========");
+        dma_mode(11, 0);
+        $display("Data got in axi %h", axi4_ram0.mem[2]);
+        $display("========== Test dma with another addr ==========");
+        dma_mode(128, 15'h0AB0); //addr << 2 bit same 2AC
+        for(integer i = 0; i < 32; i=i+1)// 32*4 = 128
+        if(axi4_ram0.mem[16'h02AC + i] !=  {flash_model.memory[i*4], flash_model.memory[i*4+1], 
+                                            flash_model.memory[i*4+2], flash_model.memory[i*4+3]})
+        begin
+             $error("[FAIL] Data got:%h , Data expected:%h", axi4_ram0.mem[16'h02AC + i], 
+             {flash_model.memory[i*4], flash_model.memory[i*4+1], 
+             flash_model.memory[i*4+2], flash_model.memory[i*4+3]});
+             CNT_ERROR = CNT_ERROR + 1'b1;
+        end 
+
+         if(CNT_ERROR == 0)
+            $display("[PASS] All test is passed!");
+        else $error("[FAIL] VALUE NOT MATCH, TOTAL ERROR: %d", CNT_ERROR);*/
+        $display("\n   Transfer 1 word (4byte)");
+        dma_testcase(4, 0);
+
+        $display("\n   Transfer 1 byte");
+        dma_testcase(1, 0);
+
+        $display("\n   Transfer 2 bytes");
+        dma_testcase(2, 0);
+
+        $display("\n   Transfer 3 bytes");
+        dma_testcase(3, 0);
+
+        $display("\n   Transfer 4 word (16 bytes)");
+        dma_testcase(16, 0);
+
+        $display("\n   Transfer large block (128 bytes)");
+        dma_testcase(128, 0);
+
+        $display("\n   Transfer to RAM offset address (32 byte)");
+        dma_testcase(32, 16'h0200);
+
+        $display("\n   Overwrite multiple times");
+        dma_testcase(8, 0);
+        dma_testcase(8, 0);
+
+        $display("\n   Stress test (1024 byte)");
+        dma_testcase(1024, 0);
 
         repeat (10) @(posedge clk);
         $finish;
