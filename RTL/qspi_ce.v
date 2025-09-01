@@ -22,7 +22,7 @@ module qspi_ce (
                      FINISH = 2'b11;
 
     reg [1:0] state, next_state;
- 
+    reg hold_qspi_done, hold_dma_done;
     
     // State register
     always @(posedge clk or negedge resetn) begin
@@ -45,10 +45,10 @@ module qspi_ce (
             end
             WAIT: begin
                 if(dma_en) begin
-                    if (qspi_done && dma_done)
+                    if (hold_qspi_done && hold_dma_done)
                         next_state = FINISH;
                 end else begin
-                    if (qspi_done)
+                    if (hold_qspi_done)
                         next_state = FINISH;
                 end
             end
@@ -58,9 +58,29 @@ module qspi_ce (
         endcase
     end
 
+    always @(posedge clk or negedge resetn) begin
+        if (!resetn) begin
+            hold_qspi_done <= 1'b0;
+            hold_dma_done  <= 1'b0;
+        end else begin
+            case (state)
+                IDLE: begin
+                    hold_qspi_done <= 1'b0;
+                    hold_dma_done  <= 1'b0;
+                end
+                WAIT: begin
+                    if (qspi_done)
+                        hold_qspi_done <= 1'b1;
+                    if (dma_done)
+                        hold_dma_done <= 1'b1;
+                end
+                default: ;
+            endcase
+        end
+    end
     // Outputs
-    assign ce_start = (state == START);
-    assign dma_start = (state == START) ? dma_en : 0;
+    assign ce_start = (state == START); //1pulse
+    assign dma_start = (state == START) && dma_en; //1pulse
     assign ce_busy = (state != IDLE );
-    assign ce_done = (state == FINISH); // done = pulse 1 chu kỳ
+    assign ce_done = (state == FINISH); //1pulse
 endmodule
