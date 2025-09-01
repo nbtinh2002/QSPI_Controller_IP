@@ -178,7 +178,7 @@ always @(posedge qspi_sclk or posedge qspi_cs_n) begin
                             else if (lanes == 1) io_oe <= 4'b0010;
                             else if (lanes == 2) io_oe <= 4'b0011;
                             else io_oe <= 4'b1111;
-                            shift_out <= memory[addr_reg];
+                            shift_out <= memory[nxt_addr_reg];
                         end
                     end
                 end
@@ -228,6 +228,7 @@ always @(posedge qspi_sclk or posedge qspi_cs_n) begin
                     if (!continuous_read && byte_cnt == MEM_SIZE - addr_reg) state <= ST_IDLE;
                     byte_cnt <= byte_cnt + 1;
                 end
+                
             end
             ST_DATA_WRITE: begin
                 if (lanes == 1) 	 shift_in <= {shift_in[6:0], io_di[0]};

@@ -133,15 +133,15 @@ module tb_qspi_controller_ip;
         input [7:0] addr;
         input [31:0] data;
         begin
-            @(posedge clk);
-            while (!apb_idle) @(posedge clk);
-            apb_addr   <= addr;
-            apb_wdata  <= data;
-            apb_rw     <= 1;       // write
-            apb_start  <= 1;
-            @(posedge clk);
-            apb_start  <= 0;
-            while (!apb_idle) @(posedge clk);
+        @(posedge clk);
+        while (!apb_idle) @(posedge clk);
+        apb_addr   <= addr;
+        apb_wdata  <= data;
+        apb_rw     <= 1;       // write
+        apb_start  <= 1;
+        @(posedge clk);
+        apb_start  <= 0;
+        while (!apb_idle) @(posedge clk);
         end
     endtask
 
@@ -154,27 +154,27 @@ module tb_qspi_controller_ip;
         integer i;
         reg [31:0] rdata;
         begin
-            for (i=0; i<nwords; i=i+1) begin
-                @(posedge clk);
-                while (!apb_idle) @(posedge clk);
-                apb_addr   <= addr;
-                apb_rw     <= 0;       // read
-                apb_start  <= 1;
-                @(posedge clk);
-                apb_start  <= 0;
-                while (!apb_idle) @(posedge clk);
-                rdata = apb_rdata;
-                wait(dut.csr_inst.read);
-                #20;
-                if(check_enable) begin
-                    if(dut.csr_inst.rx_data_i==expect_data)
-                        $display("   ✅ DATA READ: 0x%h",dut.csr_inst.rx_data_i);
-                    else
-                        $display("   ❌ ERROR: DATA READ: 0x%h, EXPECT: 0x%h",dut.csr_inst.rx_data_i, expect_data);   
-                end else begin
-                    $display(" 0x%h", dut.csr_inst.rx_data_i);
-                end
+        for (i=0; i<nwords; i=i+1) begin
+            @(posedge clk);
+            while (!apb_idle) @(posedge clk);
+            apb_addr   <= addr;
+            apb_rw     <= 0;       // read
+            apb_start  <= 1;
+            @(posedge clk);
+            apb_start  <= 0;
+            while (!apb_idle) @(posedge clk);
+            rdata = apb_rdata;
+            wait(dut.csr_inst.read);
+            #20;
+            if(check_enable) begin
+                if(dut.csr_inst.rx_data_i==expect_data)
+                    $display("        ✅ DATA READ: 0x%h",dut.csr_inst.rx_data_i);
+                else
+                    $display("        ❌ ERROR: DATA READ: 0x%h, EXPECT: 0x%h",dut.csr_inst.rx_data_i, expect_data);   
+            end else begin
+                $display(" 0x%h", dut.csr_inst.rx_data_i);
             end
+        end
         end
     endtask
 
@@ -187,68 +187,92 @@ module tb_qspi_controller_ip;
         input [31:0] dummy;
         input [31:0] ctrl;
         begin
-            apb_write(8'h24, cfg);   
-            apb_write(8'h28, op);    
-            apb_write(8'h2C, addr);  
-            apb_write(8'h30, len); 
-            apb_write(8'h34, dummy); 
-            apb_write(8'h04, ctrl);       
-            apb_write(8'h04, ctrl | 32'h0000_0100); 
-            wait(dut.qspi_ce_inst.ce_done);
-        end
-    endtask
-    
-    task dma_mode;
-        input [32:0] len;
-        input [15:0] addr;
-        begin
-        apb_write(8'h04, 32'h0000_0201);  // CTRL: ENABLE=1 and sel dma
-        apb_write(8'h24, 32'h0000_2040);  // CMD_CFG
-        apb_write(8'h28, 32'h0000_0003);  // CMD_OP
-        apb_write(8'h2C, 32'h0000_0000);  // CMD ADDR
-        apb_write(8'h3C, addr<<2);   //DMA_ADDR need set << 2
-        apb_write(8'h30, len);  // CMD_LEN: 4byte  
-        apb_write(8'h40, len); 
-        apb_write(8'h38, 32'h0000_0030); //bit 4 is read flash to dram, bit 5 count add,
-        apb_write(8'h04, 32'h0000_0301);    // Enable, DMA_EN, Trigger
+        apb_write(8'h24, cfg);   
+        apb_write(8'h28, op);    
+        apb_write(8'h2C, addr);  
+        apb_write(8'h30, len); 
+        apb_write(8'h34, dummy); 
+        apb_write(8'h04, ctrl);       
+        apb_write(8'h04, ctrl | 32'h0000_0100); 
         wait(dut.qspi_ce_inst.ce_done);
         end
     endtask
+    function automatic [31:0] pack_flash_word(input int word_idx);
+        return { flash_model.memory[word_idx*4+3],
+                flash_model.memory[word_idx*4+2],
+                flash_model.memory[word_idx*4+1],
+                flash_model.memory[word_idx*4+0] };
+    endfunction
+    // Prepare data to test erase command
+    task prepare_data(input int start_word, input int end_word, input int step);
+        int i;
+        begin
+        $display("         Prepare DATA...");
+        for (i = start_word; i < end_word; i += step) begin
+            flash_model.memory[i*4+0] = i[7:0];
+            flash_model.memory[i*4+1] = i[7:0];
+            flash_model.memory[i*4+2] = i[7:0];
+            flash_model.memory[i*4+3] = i[7:0];
+            if (i < start_word+4) // chỉ log vài dòng đầu
+                $display("         WORD[%0d] @0x%0h = %08h", i, i*4, pack_flash_word(i));
+        end
+        end
+    endtask
+    // Check test erase command
+    task check_erased(input int start_word, input int end_word, input int step);
+        int i; bit fail;
+        begin
+        fail = 0;
+        for (i = start_word; i < end_word; i += step) begin
+            if (pack_flash_word(i) !== 32'hFFFF_FFFF) begin
+                $error("         ❌ Not erased @WORD[%0d], addr=0x%0h val=%08h",
+                        i, i*4, pack_flash_word(i));
+                fail = 1;
+            end
+        end
+        if (!fail) $display("         ✅ DATA erased ok");
+        end 
+    endtask
 
-    task dma_testcase;
-        input integer len;
-        input [15:0] addr;
-        integer i, words, remain, bytes_here;
+    // Write data from DEVICE to DMA
+    task dma_testcase(input int len, input int addr);
+        int words, i, remain, bytes_here;
         reg [31:0] exp, got, mask;
         bit fail;
         begin
-            $display("    ...Testing DMA len=%0d bytes, addr=0x%h", len, addr);
-            dma_mode(len, addr);
-            words  = (len+3)/4;
-            remain = len;
-            fail   = 0;
+        $display("         Testing len = %0d byte addr = 0x%h", len, addr);
+        apb_write(8'h04, 32'h0000_0201);  // CTRL: ENABLE=1 + sel dma
+        apb_write(8'h24, 32'h0000_2040);  // CMD_CFG
+        apb_write(8'h28, 32'h0000_0003);  // CMD_OP
+        apb_write(8'h2C, 32'h0000_0000);  // CMD ADDR
+        apb_write(8'h3C, addr<<2);        // DMA_ADDR (dịch trái 2)
+        apb_write(8'h30, len);            // CMD_LEN
+        apb_write(8'h40, len);            // DMA_LEN
+        apb_write(8'h38, 32'h0000_0030);  // control bits
+        apb_write(8'h04, 32'h0000_0301);  // Enable + DMA_EN + Trigger
+        wait(dut.qspi_ce_inst.ce_done);
+        words  = (len+3)/4;
+        remain = len;
+        fail   = 0;
+        for (i=0; i<words; i++) begin
+            exp        = pack_flash_word(i);
+            got        = axi4_ram0.mem[addr + i];
+            bytes_here = (remain >= 4) ? 4 : remain;
+            mask       = 32'hFFFFFFFF << ((4 - bytes_here)*8);
 
-            for (i=0; i<words; i++) begin
-                exp = { flash_model.memory[i*4+3],
-                        flash_model.memory[i*4+2],
-                        flash_model.memory[i*4+1],
-                        flash_model.memory[i*4+0] };
-                got         = axi4_ram0.mem[addr + i];
-                bytes_here  = (remain >= 4) ? 4 : remain;
-                mask        = 32'hFFFFFFFF << ((4 - bytes_here)*8);
-                if ((got & mask) !== (exp & mask)) begin
-                    $error("    ❌ AXI[%0h] got=%08h exp=%08h mask=%08h", addr+i, got, exp, mask);
-                    fail = 1;
-                end else if (len <= 16) begin
-                    $display("    ✅ AXI[%0h] = %08h", addr+i, got & mask);
-                end
-                remain -= bytes_here;
+            if ((got & mask) !== (exp & mask)) begin
+                $error("         ❌ AXI[%0h] got=%08h exp=%08h mask=%08h",
+                    addr+i, got, exp, mask);
+                fail = 1;
+            end else if (len <= 16) begin
+                $display("         ✅ AXI[%0h] = %08h", addr+i, got & mask);
             end
-            if (!fail && len > 16) 
-                $display("    ✅ All %0d words matched", words);
+            remain -= bytes_here;
+        end
+        if (!fail && len > 16)
+            $display("         ✅ All %0d words matched", words);
         end
     endtask
-
     integer i;
     integer CNT_ERROR = 0;
 
@@ -262,7 +286,11 @@ module tb_qspi_controller_ip;
         // use code to read memory in flash_device
         //    for(i=0;i<10;i=i+1) 
         //      $display("%0d: addr %0h, data %0h",i,flash_model.addr_reg, flash_model.memory[i]);
-
+           
+      //  $display("%0d: addr %0h, data %0h",i,flash_model.addr_reg, flash_model.memory[i]);
+//        apb_write(8'h44, 32'hDEADBEEF);//LOAD DATA
+  //      send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0007, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);//WRITE DATA
+        //cfg - op - addr - len - dummy - ctrl
         $display("\n======================================================================================");
         $display("    Non_DMA     TEST CASE 0: READ DEVICE INFO");
         $display("======================================================================================");
@@ -282,38 +310,37 @@ module tb_qspi_controller_ip;
 
         $display("\n   Write Enable(0x06) (singal lanes, no addr/len/dummy)");
         send_cmd(32'h0000_0000, 32'h0000_0006, 32'h0000_0000, 32'h0000_0000, 32'h0000_0000, 32'h0000_0001);
-        send_cmd(32'h0000_2000, 32'h0000_0005, 32'h0000_0000, 32'h0000_0001, 32'h0000_0000, 32'h0000_0001);// Verify by readback
+        send_cmd(32'h0000_2000, 32'h0000_0005, 32'h0000_0000, 32'h0000_0001, 32'h0000_0000, 32'h0000_0001);//Verify
         apb_read(8'h48, 1, 32'h0200_0000,1); // expect 0x02
 
         $display("\n   Write Disable(0x04) (singal lanes, no addr/len/dummy)");
         send_cmd(32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0000, 32'h0000_0000, 32'h0000_0001);
-        send_cmd(32'h0000_2000, 32'h0000_0005, 32'h0000_0000, 32'h0000_0001, 32'h0000_0000, 32'h0000_0001);// Verify by readback
+        send_cmd(32'h0000_2000, 32'h0000_0005, 32'h0000_0000, 32'h0000_0001, 32'h0000_0000, 32'h0000_0001);//Verify
         apb_read(8'h48, 1, 32'h0000_0000,1); // expect 0x00
         
         $display("\n======================================================================================");
         $display("    Non_DMA     TEST CASE 2: READ DATA");
         $display("======================================================================================");
-        // Prepare data to test read: load new data -> write -> readback
-        send_cmd(32'h0000_0000, 32'h0000_0006, 32'h0000_000, 32'h0000_0000, 32'h0000_0000, 32'h0000_0001);// Write Enable before write data
-        apb_write(8'h44, 32'hDEADBEEF);// Write data to TX FIFO (FSM will push to device)
-        send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0001, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
+        //Prepare data
+        flash_model.memory[7]=8'hDE;
+        flash_model.memory[8]=8'hAD;
+        flash_model.memory[9]=8'hBE;
+        flash_model.memory[10]=8'hEF;
 
         $display("\n   Single Read Mode(0x03) (1-1-1)(has addr/len, no dummy)");
-        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0001, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
+        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0007, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
-      //  $display("%0d: addr %0h, data %0h",i,flash_model.addr_reg, flash_model.memory[i]);
-
         $display("\n   2xIO Read Mode(0xBB) (1-2-2)(has addr/len, dummy 8)");
-        send_cmd(32'h0000_3054, 32'h0000_00BB, 32'h0000_0001, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
+        send_cmd(32'h0000_3054, 32'h0000_00BB, 32'h0000_0007, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
         $display("\n   4xIO Read Mode(0xEB) (1-4-4)(has addr/len, dummy 8)");
-        send_cmd(32'h0000_3068, 32'h0000_00EB, 32'h0000_0001, 32'h0000_0004, 32'h0000_0000, 32'h0000_0005);
+        send_cmd(32'h0000_3068, 32'h0000_00EB, 32'h0000_0007, 32'h0000_0004, 32'h0000_0000, 32'h0000_0005);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
         $display("\n   Fast Single Read Mode(0x0B) (1-1-1)(has addr/len, dummy 8)");
-        send_cmd(32'h0000_3040, 32'h0000_000B, 32'h0000_0001, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
+        send_cmd(32'h0000_3040, 32'h0000_000B, 32'h0000_0007, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
 /*      $display("\n   Dual Read Mode(0x3B) (1-1-2)(has addr/len, dummy 8)");
@@ -323,96 +350,53 @@ module tb_qspi_controller_ip;
         $display("\n   Quad Read Mode(0x6B) (1-1-4)(has addr/len, dummy 8)");
         send_cmd(32'h0000_3060, 32'h0000_006B, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0005);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
-*/
+
         $display("\n   Fast Read (0x0B) dummy=12 (extra dummy)");
         send_cmd(32'h0000_3040, 32'h0000_000B, 32'h0000_0000, 32'h0000_0004, 32'h0000_000C, 32'h0000_0001);
         apb_read(8'h48, 1, 32'hDEADBEEF, 1);
-        //cfg - op - addr - len - dummy - ctrl
+*/       
         $display("\n======================================================================================");
         $display("    Non_DMA     TEST CASE 3: WRITE DATA");
         $display("======================================================================================");
+        send_cmd(32'h0000_0000, 32'h0000_0006, 32'h0000_000, 32'h0000_0000, 32'h0000_0000, 32'h0000_0001);//WREN
 
         $display("\n   Page Program(0x02) (1-1-1)(has addr/len, no dummy)");
         apb_write(8'h44, 32'hAABBCCDD); // Load TX FIFO
         send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);// Verify by readback
-        apb_read(8'h48, 1, 32'hAABBCCDD,1); // expect 0xAABBCCDD*/
+        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);//Verify
+        apb_read(8'h48, 1, 32'hAABBCCDD,1); // expect 0xAABBCCDD
 
         $display("\n   4xIO Page Program(0x38) (1-4-4)(has addr/len, no dummy)");
         apb_write(8'h44, 32'h11223344); // Load TX FIFO
         send_cmd(32'h0000_0068, 32'h0000_0038, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0005);
-        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);// Verify by readback
+        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);//Verify
         apb_read(8'h48, 1, 32'h11223344,1); // expect 0xBBAACCDD
 
 
         $display("\n======================================================================================");
         $display("    Non_DMA     TEST CASE 4: ERASE DATA");
-        $display("======================================================================================");
+        $display("======================================================================================");     
 
         $display("\n   Sector Erase(0x20) (4KB)");
-        // Prepare data to test erase: load new data -> write -> readback
-        apb_write(8'h44, 32'hAAAABBBB);
-        send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        $write("       OLD DATA:"); apb_read(8'h48, 1, 0,0); 
+        prepare_data(100, 160, 10);
         send_cmd(32'h0000_0040, 32'h0000_0020, 32'h0000_0000, 32'h0000_0000, 32'h0000_0000, 32'h0000_0001);
-        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);// Verify by readback
-        apb_read(8'h48, 1, 32'hFFFF_FFFF,1); // expect 0xFFFFFFFF
+        check_erased(100, 160, 10);
+
 
         $display("\n   Block Erase(0xD8) (64KB)");
-        // Prepare data to test erase: load new data -> write -> readback
-        apb_write(8'h44, 32'hCCCCDDDD);
-        send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        $write("       OLD DATA:"); apb_read(8'h48, 1, 0,0); 
+        prepare_data(100, 160, 10);
         send_cmd(32'h0000_0040, 32'h0000_00D8, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);// Verify by readback
-        apb_read(8'h48, 1, 32'hFFFF_FFFF,1); // expect 0xFFFFFFFF
+        check_erased(100, 160, 10);
         
         $display("\n   Chip Erase(0xC7) (All)");
-        // Prepare data to test erase: load new data -> write -> readback
-        apb_write(8'h44, 32'hAADDCC);
-        send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        $write("       OLD DATA:"); apb_read(8'h48, 1, 0,0); 
+        prepare_data(100, 160, 10);
         send_cmd(32'h0000_0040, 32'h0000_00C7, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);// Verify by readback
-        apb_read(8'h48, 1, 32'hFFFF_FFFF,1); // expect 0xFFFFFFFF
+        check_erased(100, 160, 10);
 
         $display("\n======================================================================================");
         $display("    DMA     TEST CASE 5: COMMAND MODE WITH DMA");
         $display("======================================================================================");
 
-/*
-        dma_mode(8, 0);
-        $display("Data got in axi %h", axi4_ram0.mem[0]);
-        $display("Data got in axi %h", axi4_ram0.mem[1]);
-         $display("========== Test dma with 1 byte ==========");
-        dma_mode(9, 0);
-        $display("Data got in axi %h", axi4_ram0.mem[2]);
-
-        $display("========== Test dma with 2 byte ==========");
-        dma_mode(10, 0);
-        $display("Data got in axi %h", axi4_ram0.mem[2]);
-
-        $display("========== Test dma with 3 byte ==========");
-        dma_mode(11, 0);
-        $display("Data got in axi %h", axi4_ram0.mem[2]);
-        $display("========== Test dma with another addr ==========");
-        dma_mode(128, 15'h0AB0); //addr << 2 bit same 2AC
-        for(integer i = 0; i < 32; i=i+1)// 32*4 = 128
-        if(axi4_ram0.mem[16'h02AC + i] !=  {flash_model.memory[i*4], flash_model.memory[i*4+1], 
-                                            flash_model.memory[i*4+2], flash_model.memory[i*4+3]})
-        begin
-             $error("[FAIL] Data got:%h , Data expected:%h", axi4_ram0.mem[16'h02AC + i], 
-             {flash_model.memory[i*4], flash_model.memory[i*4+1], 
-             flash_model.memory[i*4+2], flash_model.memory[i*4+3]});
-             CNT_ERROR = CNT_ERROR + 1'b1;
-        end 
-
-         if(CNT_ERROR == 0)
-            $display("[PASS] All test is passed!");
-        else $error("[FAIL] VALUE NOT MATCH, TOTAL ERROR: %d", CNT_ERROR);*/
         $display("\n   Transfer 1 word (4byte)");
         dma_testcase(4, 0);
 
