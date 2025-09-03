@@ -43,24 +43,12 @@ module qspi_csr
 	input wire	cmd_done_i,		
 	input wire	dma_done_i,	
 	
-	// INT_EN outputs
-	output wire	cmd_done_en_o,	
-	output wire	dma_done_en_o,
-	output wire	err_en_o,
-	output wire	fifo_tx_empty_en_o,
-	output wire	fifo_rx_full_en_o,
-
 	// INT_STAT
 	input wire	cmd_done_set_i,
-	output wire	cmd_done_o,
 	input wire	dma_done_set_i,
-	output wire dma_done_o,
 	input wire	err_set_i,
-	output wire err_done_o, 
 	input wire	fifo_tx_empty_set_i,
-	output wire	fifo_tx_empty_done_o,
 	input wire	fifo_rx_full_set_i,
-	output wire	fifo_rx_full_done_o,
 
 	// CLK_DIV outputs
 	output wire [2:0]	clk_div_o,
@@ -125,20 +113,18 @@ module qspi_csr
 	input wire			rx_full_i,	
 
 	// ERR_STAT inputs
-	input wire	timeout_i,		
-	input wire	overrun_i,		
-	input wire	underrun_i,		
-	input wire	axi_err_i,
+	input wire			timeout_i,		
+	input wire			overrun_i,		
+	input wire			underrun_i,		
+	input wire			axi_err_i,
 
 	// FIFO Signals
 	input  wire 		tx_full_i,
 	output wire [31:0]	tx_data_o,	
 	output wire			tx_wen_o,
-
 	input  wire 		rx_empty_i,	
 	input  wire [31:0]	rx_data_i,
 	output wire			rx_ren_o
-
 	);
 
 	// Address constant for paddr APB_ADDR_WIDTH bit
@@ -164,6 +150,13 @@ module qspi_csr
 	localparam [APB_ADDR_WIDTH-1:0]	FIFO_STAT_ADDR	= 'h04C;// RO
 	localparam [APB_ADDR_WIDTH-1:0]	ERR_STAT_ADDR	= 'h050;// RO
 
+	// INT_STAT RW1C latches
+	reg cmd_done_reg;
+	reg dma_done_reg;
+	reg err_reg;
+	reg fifo_tx_empty_reg;
+	reg fifo_rx_full_reg;
+	
 	// Internal registers 
 	reg [31:0] 	ctrl_reg;
 	reg [31:0] 	int_en_reg;
@@ -180,17 +173,20 @@ module qspi_csr
 	reg [31:0] 	dma_addr_reg;
 	reg [31:0] 	dma_len_reg;
 
-	// INT_STAT RW1C latches
-	reg cmd_done_reg;
-	reg dma_done_reg;
-	reg err_reg;
-	reg fifo_tx_empty_reg;
-	reg fifo_rx_full_reg;
-	wire [31:0] int_stat_reg = {27'b0, fifo_rx_full_reg, fifo_tx_empty_reg, err_reg, dma_done_reg, cmd_done_reg};
 	wire [31:0] id_reg		= {16'h0A10, 8'h01, 8'h01};
 	wire [31:0] status_reg 	= {28'b0, dma_done_i, cmd_done_i, xip_active_i, busy_i};
+	wire [31:0] int_stat_reg = {27'b0, fifo_rx_full_reg, fifo_tx_empty_reg, err_reg, dma_done_reg, cmd_done_reg};
 	wire [31:0] fifo_stat_reg	= {22'b0, rx_full_i, tx_empty_i, rx_level_i, tx_level_i};
 	wire [31:0] err_stat_reg	= {28'b0, axi_err_i, underrun_i, overrun_i, timeout_i};
+
+
+
+	// INT_EN
+	wire cmd_done_en_o		= int_en_reg[0];
+	wire dma_done_en_o		= int_en_reg[1];
+	wire err_en_o			= int_en_reg[2];
+	wire fifo_tx_empty_en_o	= int_en_reg[3];
+	wire fifo_rx_full_en_o	= int_en_reg[4];
 
 	// Decode APB transaction signals 
 	wire apb_transfer = psel && penable;
@@ -324,20 +320,6 @@ module qspi_csr
 	assign dma_en_o		 = ctrl_reg[9];
 	assign hold_en_o	 = ctrl_reg[10];
 	assign wp_en_o		 = ctrl_reg[11];
-
-	// INT_EN
-	assign cmd_done_en_o		= int_en_reg[0];
-	assign dma_done_en_o		= int_en_reg[1];
-	assign err_en_o				= int_en_reg[2];
-	assign fifo_tx_empty_en_o	= int_en_reg[3];
-	assign fifo_rx_full_en_o	= int_en_reg[4];
-	
-	// INT_STAT
-	assign cmd_done_o           = cmd_done_reg;
-	assign dma_done_o           = dma_done_reg;
-	assign err_done_o           = err_reg;
-	assign fifo_tx_empty_done_o = fifo_tx_empty_reg;
-	assign fifo_rx_full_done_o  = fifo_rx_full_reg;
 
 	// CLK_DIV
 	assign clk_div_o = clk_div_reg[2:0];
