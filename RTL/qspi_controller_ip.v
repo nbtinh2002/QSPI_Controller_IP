@@ -160,6 +160,7 @@ module qspi_controller_ip
 		.tx_data_o(tx_data), 		.rx_data_i(rx_data),
 		.tx_wen_o(tx_wen), 			.rx_ren_o(rx_ren)	
 	);
+	
 	// CE
 	qspi_ce qspi_ce_inst(
 		.clk(clk), .resetn(resetn), 
@@ -173,29 +174,30 @@ module qspi_controller_ip
 		.ce_busy(ce_busy), 
 		.ce_done(ce_done)
 	);
-	// TX FIFO
-	qspi_tx_fifo #(.FIFO_DEPTH(FIFO_DEPTH)) tx_fifo_inst ( 
+
+	// TX/RX FIFO
+	qspi_fifo #(.FIFO_DEPTH(FIFO_DEPTH),.WR_BYTES(4),.RD_BYTES(1)) tx_fifo_inst (
 		.clk(clk), .resetn(resetn), 
-		.data_in(fifo_tx_sel_wdata/*tx_data*/),	
+		.data_in(fifo_tx_sel_wdata),	
 		.data_out(tx_data_fifo), 
-		.tx_wen(fifo_tx_sel_wen/*tx_wen*/),			
-		.tx_ren(tx_ren),
-		.tx_full(fifo_tx_sel_full/*tx_full*/),			
-		.tx_empty(tx_empty), 
-		.tx_level(tx_level)
+		.wr_en(fifo_tx_sel_wen),			
+		.rd_en(tx_ren),
+		.full(fifo_tx_sel_full),			
+		.empty(tx_empty), 
+		.level(tx_level)
 	);
-	// RX FIFO
-	qspi_rx_fifo #(.FIFO_DEPTH(FIFO_DEPTH)) rx_fifo_inst (
+
+	qspi_fifo #(.FIFO_DEPTH(FIFO_DEPTH),.WR_BYTES(1),.RD_BYTES(4)) rx_fifo_inst (
 		.clk(clk), .resetn(resetn), 
 		.data_in(rx_data_fifo), 		
-		.data_out(fifo_rx_sel_rdata/*rx_data*/), 
-		.rx_wen(rx_wen),				
-		.rx_ren(fifo_rx_sel_ren/*rx_ren*/),
-		.rx_full(rx_full),				
-		.rx_empty(fifo_rx_sel_empty/*rx_empty*/), 
-		.rx_level(rx_level)
+		.data_out(fifo_rx_sel_rdata), 
+		.wr_en(rx_wen),				
+		.rd_en(fifo_rx_sel_ren),
+		.full(rx_full),				
+		.empty(fifo_rx_sel_empty), 
+		.level(rx_level)
 	);
-	
+
 	// QSPI FSM
 	qspi_fsm #(.SUPPORT_HOLD_UP(SUPPORT_HOLD_UP)) fsm_inst(
 		.qclk(clk), .qresetn(resetn),
