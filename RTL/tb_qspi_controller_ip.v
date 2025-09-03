@@ -286,10 +286,7 @@ module tb_qspi_controller_ip;
         // use code to read memory in flash_device
         //    for(i=0;i<10;i=i+1) 
         //      $display("%0d: addr %0h, data %0h",i,flash_model.addr_reg, flash_model.memory[i]);
-           
-      //  $display("%0d: addr %0h, data %0h",i,flash_model.addr_reg, flash_model.memory[i]);
-//        apb_write(8'h44, 32'hDEADBEEF);//LOAD DATA
-  //      send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0007, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);//WRITE DATA
+          
         //cfg - op - addr - len - dummy - ctrl
         $display("\n======================================================================================");
         $display("    Non_DMA     TEST CASE 0: READ DEVICE INFO");
@@ -343,7 +340,7 @@ module tb_qspi_controller_ip;
         send_cmd(32'h0000_3040, 32'h0000_000B, 32'h0000_0007, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
-/*      $display("\n   Dual Read Mode(0x3B) (1-1-2)(has addr/len, dummy 8)");
+/*        $display("\n   Dual Read Mode(0x3B) (1-1-2)(has addr/len, dummy 8)");
          send_cmd(32'h0000_3050, 32'h0000_003B, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
@@ -352,7 +349,7 @@ module tb_qspi_controller_ip;
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
         $display("\n   Fast Read (0x0B) dummy=12 (extra dummy)");
-        send_cmd(32'h0000_3040, 32'h0000_000B, 32'h0000_0000, 32'h0000_0004, 32'h0000_000C, 32'h0000_0001);
+        send_cmd(32'h0000_3040, 32'h0000_000B, 32'h0000_0007, 32'h0000_0004, 32'h0000_000C, 32'h0000_0001);
         apb_read(8'h48, 1, 32'hDEADBEEF, 1);
 */       
         $display("\n======================================================================================");
@@ -372,7 +369,6 @@ module tb_qspi_controller_ip;
         send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);//Verify
         apb_read(8'h48, 1, 32'h11223344,1); // expect 0xBBAACCDD
 
-
         $display("\n======================================================================================");
         $display("    Non_DMA     TEST CASE 4: ERASE DATA");
         $display("======================================================================================");     
@@ -380,50 +376,49 @@ module tb_qspi_controller_ip;
         $display("\n   Sector Erase(0x20) (4KB)");
         prepare_data(100, 160, 10);
         send_cmd(32'h0000_0040, 32'h0000_0020, 32'h0000_0000, 32'h0000_0000, 32'h0000_0000, 32'h0000_0001);
-        check_erased(100, 160, 10);
-
+        check_erased(100, 160, 10);// expect 0xFFFFFFFF
 
         $display("\n   Block Erase(0xD8) (64KB)");
         prepare_data(100, 160, 10);
         send_cmd(32'h0000_0040, 32'h0000_00D8, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        check_erased(100, 160, 10);
+        check_erased(100, 160, 10);// expect 0xFFFFFFFF
         
         $display("\n   Chip Erase(0xC7) (All)");
         prepare_data(100, 160, 10);
         send_cmd(32'h0000_0040, 32'h0000_00C7, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        check_erased(100, 160, 10);
+        check_erased(100, 160, 10);// expect 0xFFFFFFFF
 
         $display("\n======================================================================================");
         $display("    DMA     TEST CASE 5: COMMAND MODE WITH DMA");
         $display("======================================================================================");
 
         $display("\n   Transfer 1 word (4byte)");
-        dma_testcase(4, 0);
+        dma_testcase(4, 0);// expect 0xFFFFFFFF
 
         $display("\n   Transfer 1 byte");
-        dma_testcase(1, 0);
+        dma_testcase(1, 0);// expect 0xFF000000
 
         $display("\n   Transfer 2 bytes");
-        dma_testcase(2, 0);
+        dma_testcase(2, 0);// expect 0xFFFF0000
 
         $display("\n   Transfer 3 bytes");
-        dma_testcase(3, 0);
+        dma_testcase(3, 0);// expect 0xFFFFFF00
 
         $display("\n   Transfer 4 word (16 bytes)");
-        dma_testcase(16, 0);
+        dma_testcase(16, 0);// expect 0xFFFFFFFF
 
         $display("\n   Transfer large block (128 bytes)");
-        dma_testcase(128, 0);
+        dma_testcase(128, 0);// expect 0xFFFFFFFF
 
         $display("\n   Transfer to RAM offset address (32 byte)");
-        dma_testcase(32, 16'h0200);
+        dma_testcase(32, 16'h0200);// expect 0xFFFFFFFF
 
         $display("\n   Overwrite multiple times");
-        dma_testcase(8, 0);
+        dma_testcase(8, 0);// expect 0xFFFFFFFF
         dma_testcase(8, 0);
 
         $display("\n   Stress test (1024 byte)");
-        dma_testcase(1024, 0);
+        dma_testcase(1024, 0);// expect 0xFFFFFFFF
 
         repeat (10) @(posedge clk);
         $finish;

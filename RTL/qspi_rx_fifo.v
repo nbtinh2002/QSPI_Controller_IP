@@ -4,7 +4,7 @@ module qspi_rx_fifo #(
     input  wire        clk,
     input  wire        resetn,
 
-    // Write side (QSPI -> FIFO),
+    // Write side (QSPI -> FIFO)
     input  wire        rx_wen,
     input  wire [7:0]  data_in,
     output wire        rx_full,

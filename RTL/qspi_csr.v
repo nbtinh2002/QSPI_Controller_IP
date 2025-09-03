@@ -191,8 +191,6 @@ module qspi_csr
 	wire [31:0] status_reg 	= {28'b0, dma_done_i, cmd_done_i, xip_active_i, busy_i};
 	wire [31:0] fifo_stat_reg	= {22'b0, rx_full_i, tx_empty_i, rx_level_i, tx_level_i};
 	wire [31:0] err_stat_reg	= {28'b0, axi_err_i, underrun_i, overrun_i, timeout_i};
-	
-
 
 	// Decode APB transaction signals 
 	wire apb_transfer = psel && penable;
