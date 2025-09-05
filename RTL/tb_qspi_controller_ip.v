@@ -1,11 +1,36 @@
 `timescale 1ns/1ps
 
 module tb_qspi_controller_ip;
+    localparam integer APB_TIMEOUT_CYCLES = 1000;
+    localparam integer CLK_PERIOD_NS = 10;
 
-    // Clock & Reset
+    // ------------------- APB register offsets -------------------
+	localparam [7:0]    ID_ADDR			= 8'h00;// RO
+	localparam [7:0]	CTRL_ADDR		= 8'h04;// RW
+	localparam [7:0]	STATUS_ADDR 	= 8'h08;// RO
+	localparam [7:0]	INT_EN_ADDR 	= 8'h0C;// RW
+	localparam [7:0]	INT_STAT_ADDR	= 8'h10;// RW1C
+	localparam [7:0]	CLK_DIV_ADDR	= 8'h14;// RW
+	localparam [7:0]	CS_CTRL_ADDR	= 8'h18;// RW
+	localparam [7:0]	XIP_CFG_ADDR	= 8'h1C;// RW
+	localparam [7:0]	XIP_CMD_ADDR	= 8'h20;// RW
+	localparam [7:0]	CMD_CFG_ADDR	= 8'h24;// RW
+	localparam [7:0]	CMD_OP_ADDR		= 8'h28;// RW
+	localparam [7:0]	CMD_ADDR_ADDR	= 8'h2C;// RW
+	localparam [7:0]	CMD_LEN_ADDR	= 8'h30;// RW
+	localparam [7:0]	CMD_DUMMY_ADDR	= 8'h34;// RW
+	localparam [7:0]	DMA_CFG_ADDR	= 8'h38;// RW
+	localparam [7:0]	DMA_ADDR_ADDR	= 8'h3C;// RW
+	localparam [7:0]	DMA_LEN_ADDR	= 8'h40;// RW
+	localparam [7:0]	FIFO_TX_ADDR	= 8'h44;// WO
+	localparam [7:0]	FIFO_RX_ADDR	= 8'h48;// RO
+	localparam [7:0]	FIFO_STAT_ADDR	= 8'h4C;// RO
+	localparam [7:0]	ERR_STAT_ADDR	= 8'h50;// RO
+
+    // ------------------- Signals -------------------
     reg clk, rst_n;
     
-    //APB signals
+    // APB signals
     wire [7:0]  apb_paddr;
     wire        psel, penable, pwrite;
     wire [11:0] paddr = {4'b0000, apb_paddr}; 
@@ -17,59 +42,53 @@ module tb_qspi_controller_ip;
     wire [31:0] apb_rdata;
     wire        apb_idle, apb_busy;
 
-
     // QSPI bus & IRQ
-    wire        sclk, cs_n, hold_n, wp_n;
-    wire        io0, io1, io2, io3;
-    wire        irq;
+    wire sclk, cs_n, hold_n, wp_n;
+    wire io0, io1, io2, io3;
+    wire irq;
 
     // AXI4 Master Signals
-//    wire [3:0]  m_awid;
     wire [31:0] m_awaddr;
-//    wire [7:0]  m_awlen;
-//    wire [2:0]  m_awsize; 
-//    wire [1:0]  m_awburst;
     wire        m_awvalid;
     reg         m_awready;
-
+    //wire [3:0]  m_awid; 
+    //wire [7:0]  m_awlen;
+    //wire [2:0]  m_awsize; 
+    //wire [1:0]  m_awburst;
     wire [31:0] m_wdata;
     wire [3:0]  m_wstrb;
-//    wire        m_wlast;
-//    wire        m_wuser;
     wire        m_wvalid;
     reg         m_wready;
-
-//    reg [3:0]   m_bid;
-//    reg [1:0]   m_bresp;
-//    reg         m_buser;
+    //wire        m_wlast;
+    //wire        m_wuser;
     reg         m_bvalid;
     wire        m_bready;
-
-//    wire [3:0]  m_arid;
+    //reg [3:0]   m_bid;
+    //reg [1:0]   m_bresp;
+    //reg         m_buser;
     wire [31:0] m_araddr;
-//    wire [7:0]  m_arlen;
-//    wire [2:0]  m_arsize;
-//    wire [1:0]  m_arburst;
     wire        m_arvalid;
     reg         m_arready;
-
-//    reg [3:0]   m_rid;
+    //wire [3:0]  m_arid;
+    //wire [7:0]  m_arlen;
+    //wire [2:0]  m_arsize;
+    //wire [1:0]  m_arburst;
     reg [31:0]  m_rdata;
-//    reg [1:0]   m_rresp;
-//    reg         m_rlast;
-//    reg         m_ruser;
     reg         m_rvalid;
     wire        m_rready;
+    //reg [3:0]   m_rid;
+    //reg [1:0]   m_rresp;
+    //reg         m_rlast;
+    //reg         m_ruser;
 
-    // DUT Instance
+    // ------------------- DUT Instance -------------------
     apb_master apb_m (
         .clk(clk), .rst_n(rst_n),
         .psel(psel), .penable(penable), .pwrite(pwrite),
         .paddr(apb_paddr), .pwdata(pwdata),
         .prdata(prdata), .pready(pready),
         .start(apb_start), .rw(apb_rw),
-        .addr(apb_addr), .wdata(apb_wdata),
-        .rdata(apb_rdata),
+        .addr(apb_addr), .wdata(apb_wdata), .rdata(apb_rdata),
         .idle(apb_idle), .busy(apb_busy)
     );
 
@@ -81,61 +100,68 @@ module tb_qspi_controller_ip;
         .sclk(sclk), .cs_n(cs_n),.hold_n(hold_n), .wp_n(wp_n),
         .io0(io0), .io1(io1), .io2(io2), .io3(io3),
         // Write address
-        .m_awvalid(m_awvalid),.m_awaddr (m_awaddr),.m_awready(m_awready),
+        .m_awvalid(m_awvalid), .m_awaddr (m_awaddr), .m_awready(m_awready),
         // Write data
-        .m_wvalid(m_wvalid),.m_wdata(m_wdata),.m_wstrb(m_wstrb),.m_wready(m_wready),
+        .m_wvalid(m_wvalid), .m_wdata(m_wdata), .m_wstrb(m_wstrb), .m_wready(m_wready),
         // Write response
         .m_bvalid(m_bvalid), .m_bready(m_bready),
         // Read address
-        .m_arvalid(m_arvalid),.m_araddr(m_araddr),.m_arready(m_arready),
+        .m_arvalid(m_arvalid), .m_araddr(m_araddr), .m_arready(m_arready),
         // Read data
-        .m_rvalid(m_rvalid),.m_rdata(m_rdata),.m_rready(m_rready)
+        .m_rvalid(m_rvalid), .m_rdata(m_rdata), .m_rready(m_rready)
         );
 
-    qspi_device flash_model (
-        .qspi_sclk(sclk),
-        .qspi_cs_n(cs_n),
-        .qspi_io0(io0),
-        .qspi_io1(io1),
-        .qspi_io2(io2),
-        .qspi_io3(io3)
+    qspi_device flash_model(
+        .qspi_sclk(sclk), .qspi_cs_n(cs_n),
+        .qspi_io0(io0), .qspi_io1(io1),
+        .qspi_io2(io2), .qspi_io3(io3)
     );
 
-      axi4_ram_slave axi4_ram0 (
+      axi4_ram_slave axi4_ram0(
         .clk(clk),.rst_n(rst_n),
         // Write address
-        .awvalid(m_awvalid),.awaddr (m_awaddr),.awready(m_awready),
+        .awvalid(m_awvalid), .awaddr (m_awaddr), .awready(m_awready),
         // Write data
-        .wvalid(m_wvalid),.wdata(m_wdata),.wstrb(m_wstrb),.wready(m_wready),
+        .wvalid(m_wvalid), .wdata(m_wdata), .wstrb(m_wstrb), .wready(m_wready),
         // Write response
         .bvalid(m_bvalid), .bready(m_bready),
         // Read address
-        .arvalid(m_arvalid),.araddr(m_araddr),.arready(m_arready),
+        .arvalid(m_arvalid), .araddr(m_araddr), .arready(m_arready),
         // Read data
-        .rvalid(m_rvalid),.rdata(m_rdata),.rready(m_rready)
+        .rvalid(m_rvalid), .rdata(m_rdata), .rready(m_rready)
     );
 
-    // Clock generation 
+    // ------------------- Clock & Reset generation -------------------
     initial begin
         clk = 0;
         forever #5 clk = ~clk; 
     end
-
-    // Reset generation
     initial begin
         rst_n = 0;#20;rst_n = 1;
     end
 
-    // APB write task
+    // ------------------- Wait condition -------------------
+    task wait_with_timeout(input test_cond);
+        integer cnt;
+        begin
+            cnt = 0;
+            while (!test_cond && cnt < 1000) begin
+                @(posedge clk);
+                cnt = cnt + 1;
+            end
+        end
+    endtask
+
+    // ------------------- APB write task -------------------
     task apb_write;
-        input [7:0] addr;
+        input [7:0]  addr;
         input [31:0] data;
         begin
         @(posedge clk);
         while (!apb_idle) @(posedge clk);
         apb_addr   <= addr;
         apb_wdata  <= data;
-        apb_rw     <= 1;       // write
+        apb_rw     <= 1;// write
         apb_start  <= 1;
         @(posedge clk);
         apb_start  <= 0;
@@ -143,38 +169,32 @@ module tb_qspi_controller_ip;
         end
     endtask
 
-    // APB read task
+    // ------------------- APB read task -------------------
     task apb_read;
-        input  [7:0]  addr;
-        input integer nwords;
-        input  [31:0]  expect_data;
+        input [7:0]   addr;
+        input [31:0]  expect_data;
         input         check_enable;
-        integer i;
         reg [31:0] rdata;
         begin
-        for (i=0; i<nwords; i=i+1) begin
             @(posedge clk);
             while (!apb_idle) @(posedge clk);
             apb_addr   <= addr;
-            apb_rw     <= 0;       // read
+            apb_rw     <= 0;// read
             apb_start  <= 1;
             @(posedge clk);
             apb_start  <= 0;
             while (!apb_idle) @(posedge clk);
             rdata = apb_rdata;
             wait(dut.csr_inst.read);
-            #20;
+            repeat(2) @(posedge clk);
             if(check_enable) begin
-                if(dut.csr_inst.rx_data_i==expect_data)
-                    $display("        ✅ DATA READ: 0x%h",dut.csr_inst.rx_data_i);
-                else
-                    $display("        ❌ ERROR: DATA READ: 0x%h, EXPECT: 0x%h",dut.csr_inst.rx_data_i, expect_data);   
+                if(dut.csr_inst.rx_data_i==expect_data) $display("        ✅ DATA READ: 0x%h",dut.csr_inst.rx_data_i);
+                else  $display("        ❌ ERROR: DATA READ: 0x%h, EXPECT: 0x%h",dut.csr_inst.rx_data_i, expect_data);   
             end 
-        end
         end
     endtask
 
-    // Send command 
+    // ------------------- Send command -------------------
     task send_cmd;
         input [31:0] cfg;
         input [31:0] op;
@@ -183,31 +203,36 @@ module tb_qspi_controller_ip;
         input [31:0] dummy;
         input [31:0] ctrl;
         begin
-        apb_write(8'h24, cfg);   
-        apb_write(8'h28, op);    
-        apb_write(8'h2C, addr);  
-        apb_write(8'h30, len); 
-        apb_write(8'h34, dummy); 
-        apb_write(8'h04, ctrl);       
-        apb_write(8'h04, ctrl | 32'h0000_0100); 
-        wait(dut.qspi_ce_inst.ce_done);
+            apb_write(CMD_CFG_ADDR, cfg);   
+            apb_write(CMD_OP_ADDR, op);    
+            apb_write(CMD_ADDR_ADDR, addr);  
+            apb_write(CMD_LEN_ADDR, len); 
+            apb_write(CMD_DUMMY_ADDR, dummy); 
+            apb_write(CTRL_ADDR, ctrl);       
+            apb_write(CTRL_ADDR, ctrl | 32'h0000_0100); 
+            wait(dut.qspi_ce_inst.ce_done);
         end
     endtask
 
-    // Check data after erase
-    task check_erased(input int start_addr, input [7:0] cmd);
-        int start_word, end_word;
-        int bytes_to_check;
-        int i, j;
-        int byte_index;
-        bit fail;
-        reg [31:0] word_val;
+    // ------------------- Check data after erase ------------------- 
+    task erase_testcase;
+        input [31:0] start_addr;
+        input [7:0]  cmd;
+        integer      start_word, end_word;
+        integer      bytes_to_check;
+        integer      i, j;
+        integer      byte_index;
+        reg [31:0]   word_val;
+        reg          fail;
         begin
             case(cmd)
-                8'h20: bytes_to_check = 4*1024;        // 4KB sector erase
-                8'hD8: bytes_to_check = 64*1024;       // 64KB block erase
-                8'hC7: bytes_to_check = 1024*1024;     // 1MB chip erase
-                default: $display("❌ Unknown erase command: 0x%0h", cmd);
+                8'h20: bytes_to_check = 4*1024;// 4KB
+                8'hD8: bytes_to_check = 64*1024;// 64KB
+                8'hC7: bytes_to_check = 1024*1024;// 1MB
+                default: begin
+                    $display("❌ Unknown erase command: 0x%0h", cmd);
+                    bytes_to_check = 0;
+                end
             endcase
             start_word = start_addr / 4;
             end_word   = start_word + (bytes_to_check / 4);
@@ -229,85 +254,131 @@ module tb_qspi_controller_ip;
         end
     endtask
 
-   task dma_testcase(input int len, input int addr);
-    int words, i, remain, bytes_here;
-    reg [31:0] exp, got, mask;
-    reg [31:0] word_val;
-    bit fail;
-    begin
-        $display("         Testing len = %0d byte addr = 0x%h", len, addr);
-        apb_write(8'h04, 32'h0000_0201);  // CTRL: ENABLE=1 + sel dma
-        apb_write(8'h24, 32'h0000_2040);  // CMD_CFG
-        apb_write(8'h28, 32'h0000_0003);  // CMD_OP
-        apb_write(8'h2C, 32'h0000_0000);  // CMD ADDR
-        apb_write(8'h3C, addr<<2);        // DMA_ADDR (dịch trái 2)
-        apb_write(8'h30, len);            // CMD_LEN
-        apb_write(8'h40, len);            // DMA_LEN
-        apb_write(8'h38, 32'h0000_0030);  // control bits
-        apb_write(8'h04, 32'h0000_0301);  // Enable + DMA_EN + Trigger
-        wait(dut.qspi_ce_inst.ce_done);
-
-        words  = (len+3)/4;
-        remain = len;
-        fail   = 0;
-        for (i = 0; i < words; i = i + 1) begin
-
-            word_val = { flash_model.memory[i*4 + 3], flash_model.memory[i*4 + 2],
-                         flash_model.memory[i*4 + 1], flash_model.memory[i*4 + 0] };
-            exp        = word_val;
-            got        = axi4_ram0.mem[addr + i];
-            bytes_here = (remain >= 4) ? 4 : remain;
-            mask       = 32'hFFFFFFFF << ((4 - bytes_here)*8);
-            if ((got & mask) !== (exp & mask)) begin
-                $error("         ❌ AXI[%0h] got=%08h exp=%08h mask=%08h", addr+i, got, exp, mask);
-                fail = 1;
-            end else if (len <= 16) begin
-                $display("         ✅ AXI[%0h] = %08h", addr+i, got & mask);
-            end
-            remain -= bytes_here;
-        end
-
-        if (!fail && len > 16)
-            $display("         ✅ All %0d words matched", words);
-    end  
-    endtask
-    task check_irq(input int mark);
+    // ------------------- DMA testcase ------------------- 
+    task dma_testcase;
+        input [31:0] len;
+        input [31:0] addr;
+        integer      words, i, remain, bytes_here;
+        reg [31:0]   exp, got, mask, word_val;
+        reg          fail;
         begin
-        wait(irq);
-        if (!irq) $display("         ❌ IRQ NOT asserted");
-        else      $display("         ✅ IRQ asserted");
-        apb_write(8'h10, 32'h1 << mark);
-        wait(!irq);
-        if (irq) $display("         ❌ IRQ still high after clear");
-        else     $display("         ✅ IRQ cleared ");
+            $display("         Testing len = %0d byte addr = 0x%h", len, addr);
+            apb_write(CMD_CFG_ADDR  , 32'h0000_2040);
+            apb_write(CMD_OP_ADDR   , 32'h0000_0003);
+            apb_write(CMD_ADDR_ADDR , 32'h0000_0000);
+            apb_write(CMD_LEN_ADDR  , len);
+            apb_write(DMA_CFG_ADDR  , 32'h0000_0030);
+            apb_write(DMA_ADDR_ADDR , addr<<2); // DMA_ADDR (shift left 2)
+            apb_write(DMA_LEN_ADDR  , len); 
+            apb_write(CTRL_ADDR     , 32'h0000_0201); // CTRL: ENABLE=1 + sel dma
+            apb_write(CTRL_ADDR     , 32'h0000_0301); // Enable + DMA_EN + Trigger
+            wait(dut.qspi_ce_inst.ce_done);
+
+            words  = (len+3)/4;
+            remain = len;
+            fail   = 1'b0;
+            for(i = 0; i < words; i = i + 1) begin
+                word_val    = { flash_model.memory[i*4 + 3], flash_model.memory[i*4 + 2],
+                             flash_model.memory[i*4 + 1], flash_model.memory[i*4 + 0] };
+                exp         = word_val;
+                got         = axi4_ram0.mem[addr + i];
+                bytes_here  = (remain >= 4) ? 4 : remain;
+                mask        = 32'hFFFFFFFF << ((4 - bytes_here) * 8);
+                if((got & mask) !== (exp & mask)) begin
+                    $error("         ❌ AXI[%0h] got=%08h exp=%08h mask=%08h", addr+i, got, exp, mask);
+                    fail = 1;
+                end else if (len <= 16) $display("         ✅ AXI[%0h] = %08h", addr+i, got & mask);
+                remain = remain - bytes_here;
+            end
+            if (!fail && len > 16) $display("         ✅ All %0d words matched", words);
+        end  
+    endtask
+    
+    // ------------------- Check IRQ ------------------- 
+    task check_auto_irq;
+        integer    i;
+        reg        all_pass;
+        reg [63:0] event_name;
+        begin
+            all_pass = 1;
+            for(i=0; i<5; i++) begin
+                apb_write(INT_EN_ADDR, 32'h1 << i);
+                case(i)
+                    0: begin
+                        event_name = "CMD_done";
+                        send_cmd(32'h0000_0040, 32'h0000_0020, 0, 0, 0, 1);
+                       end
+                    1: begin
+                        event_name = "DMA_done";
+                        apb_write(CTRL_ADDR, 32'h0000_0201);    // CTRL: ENABLE=1 + sel dma
+                        apb_write(CMD_CFG_ADDR, 32'h0000_2040); // CMD_CFG
+                        apb_write(CMD_OP_ADDR, 32'h0000_0003);  // CMD_OP
+                        apb_write(CMD_ADDR_ADDR, 32'h0000_0000);// CMD ADDR
+                        apb_write(8'h3C, 0 << 2);               // DMA_ADDR (shift left 2)
+                        apb_write(CMD_LEN_ADDR, 1);             // CMD_LEN
+                        apb_write(8'h40, 1);                    // DMA_LEN
+                        apb_write(DMA_CFG_ADDR, 32'h0000_0030); // control bits
+                        apb_write(CTRL_ADDR, 32'h0000_0301);    // Enable + DMA_EN + Trigger
+                        wait (dut.qspi_ce_inst.ce_done);
+                       end
+                    2: begin
+                        event_name = "Error";
+                        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0007, 32'h0000_00AA, 32'h0000_0000, 32'h0000_0001);  
+                       end
+                    3: begin
+                        event_name = "TX_empty";
+                        apb_write(8'h44, 32'h0); // clear FIFO
+                       end
+                    4: begin
+                        event_name = "RX_full";
+                        send_cmd(32'h0000_2040, 32'h0000_0003, 7, 64, 0, 1);
+                    end
+                endcase
+                // Wait IRQ asserted
+                wait(irq);
+                if (!irq) begin 
+                    $display("         ❌ IRQ NOT asserted when %s", event_name);
+                    all_pass = 0;
+                end
+                // Cleanup special cases
+                if(i==2) send_cmd(32'h0000_0040, 32'h0000_0020, 0, 0, 0, 32'h0000_0001);// clear error by short CMD
+                if(i==4) apb_read(8'h48, 0,0);// read fifo to make space
+
+                // Clear IRQ bit
+                apb_write(INT_STAT_ADDR, 32'h1 << i);
+                wait(!irq);
+                if (irq) begin 
+                    $display("         ❌ IRQ still high after clear when %s", event_name);
+                    all_pass = 0;
+                end 
+                // reset between tests to ensure clean state
+                rst_n = 0;#20;rst_n = 1; 
+            end
+            if(all_pass) $display("         ✅ IRQ check pass ");
         end
     endtask
 
     integer i,j;
     integer CNT_ERROR = 0;
 
-    // Test Sequence
+    // ------------------- Test Sequence -------------------
     initial begin
         $dumpfile("tb_qspi_controller_ip.vcd");
         $dumpvars(0, tb_qspi_controller_ip);
         wait(rst_n);
         wait(apb_idle); 
-        // use code to read memory in flash_device
-        //    for(i=0;i<10;i=i+1) 
-        //      $display("%0d: addr %0h, data %0h",i,flash_model.addr_reg, flash_model.memory[i]);
-          
-        //cfg - op - addr - len - dummy - ctrl
+
         $display("\n======================================================================================");
         $display("                      GROUP 1: READ INFO DEVICE");
         $display("======================================================================================");
         
         $display("\n   TC01: Read Status Register(0x05) (singal lanes, 1 byte, no addr/dummy)");
         send_cmd(32'h0000_2000, 32'h0000_0005, 32'h0000_0000, 32'h0000_0001, 32'h0000_0000, 32'h0000_0001); 
-        apb_read(8'h48, 1, 32'h0000_0000,1); // expect 0x00
+        apb_read(8'h48, 32'h0000_0000,1); // expect 0x00
 
         $display("\n   TC02: Read Identification(0x9F) (singal lanes, 1 byte, no addr/dummy)");
         send_cmd(32'h0000_2000, 32'h0000_009F, 32'h0000_0000, 32'h0000_0001, 32'h0000_0000, 32'h0000_0001); 
-        apb_read(8'h48, 1, 32'hC200_0000,1); // expect 0xC2
+        apb_read(8'h48, 32'hC200_0000,1); // expect 0xC2
         
         $display("\n======================================================================================");
         $display("                      GROUP 2: WRITE ENABLE/DISABLE LATCH");
@@ -316,12 +387,12 @@ module tb_qspi_controller_ip;
         $display("\n   TC03: Write Enable(0x06) (singal lanes, no addr/len/dummy)");
         send_cmd(32'h0000_0000, 32'h0000_0006, 32'h0000_0000, 32'h0000_0000, 32'h0000_0000, 32'h0000_0001);
         send_cmd(32'h0000_2000, 32'h0000_0005, 32'h0000_0000, 32'h0000_0001, 32'h0000_0000, 32'h0000_0001);//Verify
-        apb_read(8'h48, 1, 32'h0200_0000,1); // expect 0x02
+        apb_read(8'h48, 32'h0200_0000,1); // expect 0x02
 
         $display("\n   TC04: Write Disable(0x04) (singal lanes, no addr/len/dummy)");
         send_cmd(32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0000, 32'h0000_0000, 32'h0000_0001);
         send_cmd(32'h0000_2000, 32'h0000_0005, 32'h0000_0000, 32'h0000_0001, 32'h0000_0000, 32'h0000_0001);//Verify
-        apb_read(8'h48, 1, 32'h0000_0000,1); // expect 0x00
+        apb_read(8'h48, 32'h0000_0000,1); // expect 0x00
    
         $display("\n======================================================================================");
         $display("                               GROUP 3: READ DATA");
@@ -336,7 +407,8 @@ module tb_qspi_controller_ip;
         flash_model.memory[13]=8'hDA;
         flash_model.memory[14]=8'hED;
         flash_model.memory[15]=8'h11;
-        $display("\n         Prepare data...");
+        $display("\n   .....Preparing data.....");
+        // If you want to know the data that has been written to memory you can use the code below
         //for (i=1; i<21; i++) begin
         //    $write("[%2d]: %0h - ",i, flash_model.memory[i]);
         //    if( i%4==0&&i!=0) $display("");
@@ -344,25 +416,25 @@ module tb_qspi_controller_ip;
 
         $display("\n   TC05: Single Read Mode(0x03) (1-1-1)(4 bytes at 0x07, no dummy)");
         send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0007, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
+        apb_read(8'h48, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
         $display("\n   TC06: Single Read Mode(0x03) (1-1-1)(10 bytes at 0x07, no dummy)");
         send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0007, 32'h0000_000A, 32'h0000_0000, 32'h0000_0001);
-        apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
-        apb_read(8'h48, 1, 32'hFEEBDAED,1); // expect 0xFEEBDAED
-        apb_read(8'h48, 1, 32'h11FF0000,1); // expect 0x11FF0000
+        apb_read(8'h48, 32'hDEADBEEF,1); // expect 0xDEADBEEF
+        apb_read(8'h48, 32'hFEEBDAED,1); // expect 0xFEEBDAED
+        apb_read(8'h48, 32'h11FF0000,1); // expect 0x11FF0000
 
         $display("\n   TC07: 2xIO Read Mode(0xBB) (1-2-2)(4 bytes at 0x07, dummy 8)");
         send_cmd(32'h0000_3054, 32'h0000_00BB, 32'h0000_0007, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
+        apb_read(8'h48, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
         $display("\n   TC08: 4xIO Read Mode(0xEB) (1-4-4)(4 bytes at 0x07, dummy 8)");
         send_cmd(32'h0000_3068, 32'h0000_00EB, 32'h0000_0007, 32'h0000_0004, 32'h0000_0000, 32'h0000_0005);
-        apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
+        apb_read(8'h48, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
         $display("\n   TC09: Fast Single Read Mode(0x0B) (1-1-1)(4 bytes at 0x07, dummy 8)");
         send_cmd(32'h0000_3040, 32'h0000_000B, 32'h0000_0007, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
+        apb_read(8'h48, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
         $display("\n======================================================================================");
         $display("                          GROUP 4: WRITE DATA");
@@ -373,13 +445,13 @@ module tb_qspi_controller_ip;
         apb_write(8'h44, 32'hAABBCCDD); // Load TX FIFO
         send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);//Verify
-        apb_read(8'h48, 1, 32'hAABBCCDD,1); // expect 0xAABBCCDD
+        apb_read(8'h48, 32'hAABBCCDD,1); // expect 0xAABBCCDD
 
         $display("\n   TC11: 4xIO Page Program(0x38) (1-4-4)(4 bytes at 0x00, no dummy)");
         apb_write(8'h44, 32'h11223344); // Load TX FIFO
         send_cmd(32'h0000_0068, 32'h0000_0038, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0005);
         send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);//Verify
-        apb_read(8'h48, 1, 32'h11223344,1); // expect 0xBBAACCDD
+        apb_read(8'h48, 32'h11223344,1); // expect 0xBBAACCDD
 
         $display("\n   TC12: Page Program(0x02) (1-1-1)(11 bytes at 0x05, no dummy)");
         apb_write(8'h44, 32'hAABBCCDD); // Load TX FIFO
@@ -387,42 +459,42 @@ module tb_qspi_controller_ip;
         apb_write(8'h44, 32'h55667788); // Load TX FIFO
         send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0005, 32'h0000_000B, 32'h0000_0000, 32'h0000_0001);
         send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0005, 32'h0000_000B, 32'h0000_0000, 32'h0000_0001);//Verify
-        apb_read(8'h48, 1, 32'hAABBCCDD,1); // expect 0xAABBCCDD
-        apb_read(8'h48, 1, 32'h11223344,1); // expect 0x11223344
-        apb_read(8'h48, 1, 32'h55667700,1); // expect 0x55667700
+        apb_read(8'h48, 32'hAABBCCDD,1); // expect 0xAABBCCDD
+        apb_read(8'h48, 32'h11223344,1); // expect 0x11223344
+        apb_read(8'h48, 32'h55667700,1); // expect 0x55667700
 
         $display("\n======================================================================================");
         $display("                          GROUP 5: ERASE DATA");
         $display("======================================================================================");     
 
-        $display("\nPrepare data");
+        $display("\n   .....Preparing data.....");
         j=0;
-        for (i=100; i<70000; i=i+500) begin
-            flash_model.memory[i] = 8'hAA;
-            $write("[%5d]: %0h - ",i, flash_model.memory[i]);
-            j=j+1;
-            if(j==10) begin
-                $display("");
-                j=0;
-            end
-        end
-
-        $display("\n   TC13: Sector Erase(0x20) (4KB)");
+        for (i=100; i<70000; i=i+500) flash_model.memory[i] = 8'hAA;
+        // If you want to know the data that has been written to memory you can use the code below
+        //for (i=100; i<70000; i=i+500) begin
+        //    $write("[%5d]: %0h - ",i, flash_model.memory[i]);
+        //    j=j+1;
+        //    if(j==10) begin
+        //        $display("");
+        //        j=0;
+        //    end
+        //end
+        $display("\n   TC: Sector Erase(0x20) (4KB)");
         send_cmd(32'h0000_0040, 32'h0000_0020, 32'h0000_0000, 32'h0000_0000, 32'h0000_0000, 32'h0000_0001);
-        check_erased(0, 8'h20);
+        erase_testcase(0, 8'h20);
 
-        $display("\n   TC14: Block Erase(0xD8) (64KB)");
+        $display("\n   TC: Block Erase(0xD8) (64KB)");
         send_cmd(32'h0000_0040, 32'h0000_00D8, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        check_erased(0, 8'hD8);
-/*        
-        $display("\n   TC15: Chip Erase(0xC7) (All)");
+        erase_testcase(0, 8'hD8);
+        
+        $display("\n   TC: Chip Erase(0xC7) (All)");
         send_cmd(32'h0000_0040, 32'h0000_00C7, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        check_erased(0, 8'hC7);
-*/
+        erase_testcase(0, 8'hC7);
+
         $display("\n======================================================================================");
         $display("                      GROUP 6: COMMAND MODE WITH DMA");
         $display("======================================================================================");
-/*
+
         $display("\n   TC16: Transfer 1 byte");
         dma_testcase(1, 0);// expect 0xFF000000
 
@@ -449,61 +521,28 @@ module tb_qspi_controller_ip;
         $display("                      GROUP 7: FLAGS CHECKING");
         $display("======================================================================================");
    
-        $display("\n   TC25: Underrun flags test");
+        $display("\n   TC: Underrun flags test");
         send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0005, 32'h0000_0008, 32'h0000_0000, 32'h0000_0001);
         if (dut.csr_inst.err_stat_reg[2]) $display("         ✅ UNDERRUN flag set");
         else $error("         ❌ UNDERRUN not set (expected)");
         rst_n = 0;#20;rst_n = 1;
 
-        $display("\n   TC26: Overrun flags test");
+        $display("\n   TC: Overrun flags test");
         send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0007, 32'h0000_00AA, 32'h0000_0000, 32'h0000_0001);
         if (dut.csr_inst.err_stat_reg[1]) $display("         ✅ OVERRUN flag set");
         else $error("         ❌ OVERRUN not set (expected)");
-        repeat (4) apb_read(8'h48, 1, 32'h0, 0);
+        repeat (4) apb_read(8'h48, 32'h0, 0);
         rst_n = 0;#20;rst_n = 1;
 
-        $display("\n   TC27: Timeout flag test");
+        $display("\n   TC: Timeout flag test");
         send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0005, 32'h0000_0008, 32'h0000_0000, 32'h0000_0001);
         if (dut.csr_inst.err_stat_reg[0])  $display("         ✅ TIMEOUT flag set");
         else $error("         ❌ TIMEOUT flag NOT set (expected)");
         rst_n = 0;#20;rst_n = 1;
 
-        $display("\n   TC28: IRQ flags test when CMD_done");
-        apb_write(8'h0C, 32'h1 << 0);
-        send_cmd(32'h0000_0040, 32'h0000_0020, 0, 0, 0, 1);
-        check_irq(0);
-        rst_n = 0;#20;rst_n = 1;
+        $display("\n   TC: IRQ output test");
+        check_auto_irq;
 
-        $display("\n   TC29: IRQ flags test when DMA_done");
-        apb_write(8'h0C, 32'h1 << 1);
-        apb_write(8'h04, 32'h0000_0201);  // CTRL: ENABLE=1 + sel dma
-        apb_write(8'h24, 32'h0000_2040);  // CMD_CFG
-        apb_write(8'h28, 32'h0000_0003);  // CMD_OP
-        apb_write(8'h2C, 32'h0000_0000);  // CMD ADDR
-        apb_write(8'h3C, 0 << 2);         // DMA_ADDR (dịch trái 2)
-        apb_write(8'h30, 1);              // CMD_LEN
-        apb_write(8'h40, 1);              // DMA_LEN
-        apb_write(8'h38, 32'h0000_0030);  // control bits
-        apb_write(8'h04, 32'h0000_0301);  // Enable + DMA_EN + Trigger
-        wait (dut.qspi_ce_inst.ce_done);
-        wait(irq);
-        check_irq(1);
-        rst_n = 0;#20;rst_n = 1;
-*/
-/*        $display("\n   TC29: IRQ flags test when error");
-        apb_write(8'h10, 32'h1 << 4);
-         send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0007, 32'h0000_00AA, 32'h0000_0000, 32'h0000_0001); // invalid adress
-        //wait(irq);
-        if (!irq) $display("         ❌ IRQ NOT asserted");
-        else      $display("         ✅ IRQ asserted");
-        apb_write(8'h10, 32'h1 << 4);
-       // wait(!irq);
-        if (irq) $display("         ❌ IRQ still high after clear");
-        else     $display("         ✅ IRQ cleared ");
-        rst_n = 0;#20;rst_n = 1; */   
-            
-            
-        
         repeat (10) @(posedge clk);
         $finish;
     end

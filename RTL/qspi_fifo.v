@@ -68,7 +68,7 @@ module qspi_fifo #(
                 mem[word_idx][8*(WORD_BYTES-1-byte_off) +:8] 
                     <= data_in[8*(WR_BYTES-i)-1 -:8];
             end
-            wr_byte_ptr <= wr_byte_ptr + WR_BYTES;
+            wr_byte_ptr <= (wr_byte_ptr + WR_BYTES) % TOTAL_BYTES;
         end
     end
 
@@ -88,8 +88,8 @@ module qspi_fifo #(
                 else
                     data_out[8*(RD_BYTES-i)-1 -:8] <= 8'h00;
             end
-            rd_byte_ptr <= rd_byte_ptr + take_bytes;
-        end
+            rd_byte_ptr <= (rd_byte_ptr + take_bytes) % TOTAL_BYTES ;
+        end 
     end
 
     //==== Level (byte counter) ====

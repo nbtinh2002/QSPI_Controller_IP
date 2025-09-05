@@ -107,6 +107,7 @@ module qspi_controller_ip
     wire [31:0] dma_len; //len for dma
 
 	//dma with ce: dma done and start signal
+	wire [3:0] burst_size;
 	wire dma_ce_done, dma_start;
 	wire [6:0] byte_level;
 
@@ -145,7 +146,7 @@ module qspi_controller_ip
 		.cmd_dummy_cycles_o(dummy_cycles),
 		.cmd_dir_o(cmd_dir), 
 		// DMA_CFG						// DMA_ADDR, DMA_LEN
-		.dma_burst_size_o(), 			.dma_addr_o(dma_addr),
+		.dma_burst_size_o(burst_size), 	.dma_addr_o(dma_addr),
 		.dma_dir_o(dma_dir), 			.dma_len_o(dma_len),
 		.dma_incr_addr_o(incr_addr),
 		// FIFO_STAT
@@ -176,28 +177,6 @@ module qspi_controller_ip
 		.ce_busy(ce_busy), 
 		.ce_done(ce_done)
 	);
-/*	// TX/RX FIFO
-	qspi_fifo #(.FIFO_DEPTH(FIFO_DEPTH)) tx_fifo_inst (
-		.clk(clk), .resetn(resetn), 
-		.data_in(fifo_tx_sel_wdata),	
-		.data_out(tx_data_fifo), 
-		.wr_en(fifo_tx_sel_wen),			
-		.rd_en(tx_ren),
-		.full(fifo_tx_sel_full),			
-		.empty(tx_empty), 
-		.level(tx_level)
-	);
-
-	qspi_fifo #(.FIFO_DEPTH(FIFO_DEPTH)) rx_fifo_inst (
-		.clk(clk), .resetn(resetn), 
-		.data_in(rx_data_fifo), 		
-		.data_out(fifo_rx_sel_rdata), 
-		.wr_en(rx_wen),				
-		.rd_en(fifo_rx_sel_ren),
-		.full(rx_full),				
-		.empty(fifo_rx_sel_empty), 
-		.level(rx_level)
-	);*/
 
 	// TX/RX FIFO
 	qspi_fifo #(.FIFO_DEPTH(FIFO_DEPTH),.WR_BYTES(4),.RD_BYTES(1)) tx_fifo_inst (
@@ -291,7 +270,7 @@ module qspi_controller_ip
         .dma_fifo_ren(dma_fifo_ren),   		.dma_fifo_wen(dma_fifo_wen),
         .dma_fifo_empty(dma_fifo_empty),	.dma_fifo_full(dma_fifo_full),
         .dma_fifo_rdata(dma_fifo_rdata),	.dma_fifo_wdata(dma_fifo_wdata),
-		.rx_level_i(byte_level),
+		.rx_level_i(byte_level),			.dma_burst_size_i(burst_size),
         //data input from csr
         .src_addr_i(dma_addr), .len_i(dma_len), .dma_start_i(dma_start),
         .dma_sel_i(dma_en), .dma_enable_i(enable), .dma_dir_i(dma_dir), 

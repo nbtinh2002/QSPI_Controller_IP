@@ -33,7 +33,7 @@ module qspi_dma(
 	//csr input for dma
 	input wire[31:0] src_addr_i, len_i,
 	input dma_start_i,// start from ce
-//	input [3:0] dma_brust_size_i,
+	input [3:0] dma_burst_size_i,
 	input dma_incr_addr_i,
 	//connect to fifo
 	//read fifo is write to axi
@@ -61,7 +61,7 @@ wire 		start_write;
 wire [31:0]	w_size_data;
 wire [31:0] waddr_reg;
 wire		write_done;
-
+wire[3:0] dma_burst_size;
 
 	dma_controller ctrl0(.clk(clk),
                         .rst_n(rst_n),
@@ -83,7 +83,9 @@ wire		write_done;
                         .dma_dir_i(dma_dir_i),
                         .dma_ce_done,
                         .incr_addr_i(dma_incr_addr_i),
-                        .incr_addr_o(incr_addr)
+                        .incr_addr_o(incr_addr),
+                        .dma_burst_size_i(dma_burst_size_i),
+                        .dma_burst_size_o(dma_burst_size)
     );
 	//DMA read_axi4_interface module
 	dma_read_axi4 rd_axi40(	.clk(clk),
@@ -123,7 +125,8 @@ wire		write_done;
                             .axi_bvalid(axi_bvalid),
                             .axi_bready(axi_bready),
                             .rx_level_i(rx_level_i),
-                            .incr_addr_i(incr_addr)						
+                            .incr_addr_i(incr_addr),
+                            .dma_burst_size_i(dma_burst_size)					
 	);
 endmodule
 /*module qspi_dma
