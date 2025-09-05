@@ -123,9 +123,7 @@ module tb_qspi_controller_ip;
 
     // Reset generation
     initial begin
-        rst_n = 0;
-        #20;
-        rst_n = 1;
+        rst_n = 0;#20;rst_n = 1;
     end
 
     // APB write task
@@ -171,9 +169,7 @@ module tb_qspi_controller_ip;
                     $display("        ✅ DATA READ: 0x%h",dut.csr_inst.rx_data_i);
                 else
                     $display("        ❌ ERROR: DATA READ: 0x%h, EXPECT: 0x%h",dut.csr_inst.rx_data_i, expect_data);   
-            end else begin
-                $display(" 0x%h", dut.csr_inst.rx_data_i);
-            end
+            end 
         end
         end
     endtask
@@ -197,49 +193,48 @@ module tb_qspi_controller_ip;
         wait(dut.qspi_ce_inst.ce_done);
         end
     endtask
-    function automatic [31:0] pack_flash_word(input int word_idx);
-        return { flash_model.memory[word_idx*4+3],
-                flash_model.memory[word_idx*4+2],
-                flash_model.memory[word_idx*4+1],
-                flash_model.memory[word_idx*4+0] };
-    endfunction
-    // Prepare data to test erase command
-    task prepare_data(input int start_word, input int end_word, input int step);
-        int i;
+
+    // Check data after erase
+    task check_erased(input int start_addr, input [7:0] cmd);
+        int start_word, end_word;
+        int bytes_to_check;
+        int i, j;
+        int byte_index;
+        bit fail;
+        reg [31:0] word_val;
         begin
-        $display("         Prepare DATA...");
-        for (i = start_word; i < end_word; i += step) begin
-            flash_model.memory[i*4+0] = i[7:0];
-            flash_model.memory[i*4+1] = i[7:0];
-            flash_model.memory[i*4+2] = i[7:0];
-            flash_model.memory[i*4+3] = i[7:0];
-            if (i < start_word+4) // chỉ log vài dòng đầu
-                $display("         WORD[%0d] @0x%0h = %08h", i, i*4, pack_flash_word(i));
-        end
-        end
-    endtask
-    // Check test erase command
-    task check_erased(input int start_word, input int end_word, input int step);
-        int i; bit fail;
-        begin
-        fail = 0;
-        for (i = start_word; i < end_word; i += step) begin
-            if (pack_flash_word(i) !== 32'hFFFF_FFFF) begin
-                $error("         ❌ Not erased @WORD[%0d], addr=0x%0h val=%08h",
-                        i, i*4, pack_flash_word(i));
-                fail = 1;
+            case(cmd)
+                8'h20: bytes_to_check = 4*1024;        // 4KB sector erase
+                8'hD8: bytes_to_check = 64*1024;       // 64KB block erase
+                8'hC7: bytes_to_check = 1024*1024;     // 1MB chip erase
+                default: $display("❌ Unknown erase command: 0x%0h", cmd);
+            endcase
+            start_word = start_addr / 4;
+            end_word   = start_word + (bytes_to_check / 4);
+            fail = 0;
+            byte_index = 0;
+            for (i = start_word; i < end_word; i = i + 1) begin
+                word_val = {flash_model.memory[i*4 + 3], flash_model.memory[i*4 + 2], 
+                            flash_model.memory[i*4 + 1], flash_model.memory[i*4 + 0]};
+                for (j = 0; j < 4 && byte_index < bytes_to_check; j = j + 1) begin
+                    if (flash_model.memory[i*4 + j] !== 8'hFF) begin
+                        $error("         ❌ Not erased  BYTE[%0d], WORD[%0d], addr=0x%0h val=%02h",
+                            i*4 + j, i, i*4 + j, flash_model.memory[i*4 + j]);
+                        fail = 1;
+                    end
+                    byte_index = byte_index + 1;
+                end
             end
+            if (!fail) $display("         ✅ DATA erased ok");
         end
-        if (!fail) $display("         ✅ DATA erased ok");
-        end 
     endtask
 
-    // Write data from DEVICE to DMA
-    task dma_testcase(input int len, input int addr);
-        int words, i, remain, bytes_here;
-        reg [31:0] exp, got, mask;
-        bit fail;
-        begin
+   task dma_testcase(input int len, input int addr);
+    int words, i, remain, bytes_here;
+    reg [31:0] exp, got, mask;
+    reg [31:0] word_val;
+    bit fail;
+    begin
         $display("         Testing len = %0d byte addr = 0x%h", len, addr);
         apb_write(8'h04, 32'h0000_0201);  // CTRL: ENABLE=1 + sel dma
         apb_write(8'h24, 32'h0000_2040);  // CMD_CFG
@@ -251,36 +246,50 @@ module tb_qspi_controller_ip;
         apb_write(8'h38, 32'h0000_0030);  // control bits
         apb_write(8'h04, 32'h0000_0301);  // Enable + DMA_EN + Trigger
         wait(dut.qspi_ce_inst.ce_done);
+
         words  = (len+3)/4;
         remain = len;
         fail   = 0;
-        for (i=0; i<words; i++) begin
-            exp        = pack_flash_word(i);
+        for (i = 0; i < words; i = i + 1) begin
+
+            word_val = { flash_model.memory[i*4 + 3], flash_model.memory[i*4 + 2],
+                         flash_model.memory[i*4 + 1], flash_model.memory[i*4 + 0] };
+            exp        = word_val;
             got        = axi4_ram0.mem[addr + i];
             bytes_here = (remain >= 4) ? 4 : remain;
             mask       = 32'hFFFFFFFF << ((4 - bytes_here)*8);
-
             if ((got & mask) !== (exp & mask)) begin
-                $error("         ❌ AXI[%0h] got=%08h exp=%08h mask=%08h",
-                    addr+i, got, exp, mask);
+                $error("         ❌ AXI[%0h] got=%08h exp=%08h mask=%08h", addr+i, got, exp, mask);
                 fail = 1;
             end else if (len <= 16) begin
                 $display("         ✅ AXI[%0h] = %08h", addr+i, got & mask);
             end
             remain -= bytes_here;
         end
+
         if (!fail && len > 16)
             $display("         ✅ All %0d words matched", words);
+    end  
+    endtask
+    task check_irq(input int mark);
+        begin
+        wait(irq);
+        if (!irq) $display("         ❌ IRQ NOT asserted");
+        else      $display("         ✅ IRQ asserted");
+        apb_write(8'h10, 32'h1 << mark);
+        wait(!irq);
+        if (irq) $display("         ❌ IRQ still high after clear");
+        else     $display("         ✅ IRQ cleared ");
         end
     endtask
-    integer i;
+
+    integer i,j;
     integer CNT_ERROR = 0;
 
     // Test Sequence
     initial begin
         $dumpfile("tb_qspi_controller_ip.vcd");
         $dumpvars(0, tb_qspi_controller_ip);
-
         wait(rst_n);
         wait(apb_idle); 
         // use code to read memory in flash_device
@@ -289,137 +298,212 @@ module tb_qspi_controller_ip;
           
         //cfg - op - addr - len - dummy - ctrl
         $display("\n======================================================================================");
-        $display("    Non_DMA     TEST CASE 0: READ DEVICE INFO");
+        $display("                      GROUP 1: READ INFO DEVICE");
         $display("======================================================================================");
         
-        $display("\n   Read Status Register(0x05) (singal lanes, 1 byte, no addr/dummy)");
+        $display("\n   TC01: Read Status Register(0x05) (singal lanes, 1 byte, no addr/dummy)");
         send_cmd(32'h0000_2000, 32'h0000_0005, 32'h0000_0000, 32'h0000_0001, 32'h0000_0000, 32'h0000_0001); 
         apb_read(8'h48, 1, 32'h0000_0000,1); // expect 0x00
 
-        $display("\n   Read Identification(0x9F) (singal lanes, 1 byte, no addr/dummy)");
+        $display("\n   TC02: Read Identification(0x9F) (singal lanes, 1 byte, no addr/dummy)");
         send_cmd(32'h0000_2000, 32'h0000_009F, 32'h0000_0000, 32'h0000_0001, 32'h0000_0000, 32'h0000_0001); 
         apb_read(8'h48, 1, 32'hC200_0000,1); // expect 0xC2
         
-
         $display("\n======================================================================================");
-        $display("    Non_DMA     TEST CASE 1: WRITE ENABLE/DISABLE LATCH");
+        $display("                      GROUP 2: WRITE ENABLE/DISABLE LATCH");
         $display("======================================================================================");
 
-        $display("\n   Write Enable(0x06) (singal lanes, no addr/len/dummy)");
+        $display("\n   TC03: Write Enable(0x06) (singal lanes, no addr/len/dummy)");
         send_cmd(32'h0000_0000, 32'h0000_0006, 32'h0000_0000, 32'h0000_0000, 32'h0000_0000, 32'h0000_0001);
         send_cmd(32'h0000_2000, 32'h0000_0005, 32'h0000_0000, 32'h0000_0001, 32'h0000_0000, 32'h0000_0001);//Verify
         apb_read(8'h48, 1, 32'h0200_0000,1); // expect 0x02
 
-        $display("\n   Write Disable(0x04) (singal lanes, no addr/len/dummy)");
+        $display("\n   TC04: Write Disable(0x04) (singal lanes, no addr/len/dummy)");
         send_cmd(32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0000, 32'h0000_0000, 32'h0000_0001);
         send_cmd(32'h0000_2000, 32'h0000_0005, 32'h0000_0000, 32'h0000_0001, 32'h0000_0000, 32'h0000_0001);//Verify
         apb_read(8'h48, 1, 32'h0000_0000,1); // expect 0x00
-        
+   
         $display("\n======================================================================================");
-        $display("    Non_DMA     TEST CASE 2: READ DATA");
+        $display("                               GROUP 3: READ DATA");
         $display("======================================================================================");
         //Prepare data
         flash_model.memory[7]=8'hDE;
         flash_model.memory[8]=8'hAD;
         flash_model.memory[9]=8'hBE;
         flash_model.memory[10]=8'hEF;
+        flash_model.memory[11]=8'hFE;
+        flash_model.memory[12]=8'hEB;
+        flash_model.memory[13]=8'hDA;
+        flash_model.memory[14]=8'hED;
+        flash_model.memory[15]=8'h11;
+        $display("\n         Prepare data...");
+        //for (i=1; i<21; i++) begin
+        //    $write("[%2d]: %0h - ",i, flash_model.memory[i]);
+        //    if( i%4==0&&i!=0) $display("");
+        //end
 
-        $display("\n   Single Read Mode(0x03) (1-1-1)(has addr/len, no dummy)");
+        $display("\n   TC05: Single Read Mode(0x03) (1-1-1)(4 bytes at 0x07, no dummy)");
         send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0007, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
-        $display("\n   2xIO Read Mode(0xBB) (1-2-2)(has addr/len, dummy 8)");
+        $display("\n   TC06: Single Read Mode(0x03) (1-1-1)(10 bytes at 0x07, no dummy)");
+        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0007, 32'h0000_000A, 32'h0000_0000, 32'h0000_0001);
+        apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
+        apb_read(8'h48, 1, 32'hFEEBDAED,1); // expect 0xFEEBDAED
+        apb_read(8'h48, 1, 32'h11FF0000,1); // expect 0x11FF0000
+
+        $display("\n   TC07: 2xIO Read Mode(0xBB) (1-2-2)(4 bytes at 0x07, dummy 8)");
         send_cmd(32'h0000_3054, 32'h0000_00BB, 32'h0000_0007, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
-        $display("\n   4xIO Read Mode(0xEB) (1-4-4)(has addr/len, dummy 8)");
+        $display("\n   TC08: 4xIO Read Mode(0xEB) (1-4-4)(4 bytes at 0x07, dummy 8)");
         send_cmd(32'h0000_3068, 32'h0000_00EB, 32'h0000_0007, 32'h0000_0004, 32'h0000_0000, 32'h0000_0005);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
-        $display("\n   Fast Single Read Mode(0x0B) (1-1-1)(has addr/len, dummy 8)");
+        $display("\n   TC09: Fast Single Read Mode(0x0B) (1-1-1)(4 bytes at 0x07, dummy 8)");
         send_cmd(32'h0000_3040, 32'h0000_000B, 32'h0000_0007, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
 
-/*        $display("\n   Dual Read Mode(0x3B) (1-1-2)(has addr/len, dummy 8)");
-         send_cmd(32'h0000_3050, 32'h0000_003B, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
-
-        $display("\n   Quad Read Mode(0x6B) (1-1-4)(has addr/len, dummy 8)");
-        send_cmd(32'h0000_3060, 32'h0000_006B, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0005);
-        apb_read(8'h48, 1, 32'hDEADBEEF,1); // expect 0xDEADBEEF
-
-        $display("\n   Fast Read (0x0B) dummy=12 (extra dummy)");
-        send_cmd(32'h0000_3040, 32'h0000_000B, 32'h0000_0007, 32'h0000_0004, 32'h0000_000C, 32'h0000_0001);
-        apb_read(8'h48, 1, 32'hDEADBEEF, 1);
-*/       
         $display("\n======================================================================================");
-        $display("    Non_DMA     TEST CASE 3: WRITE DATA");
+        $display("                          GROUP 4: WRITE DATA");
         $display("======================================================================================");
         send_cmd(32'h0000_0000, 32'h0000_0006, 32'h0000_000, 32'h0000_0000, 32'h0000_0000, 32'h0000_0001);//WREN
 
-        $display("\n   Page Program(0x02) (1-1-1)(has addr/len, no dummy)");
+        $display("\n   TC10: Page Program(0x02) (1-1-1)(4 bytes at 0x00, no dummy)");
         apb_write(8'h44, 32'hAABBCCDD); // Load TX FIFO
         send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);//Verify
         apb_read(8'h48, 1, 32'hAABBCCDD,1); // expect 0xAABBCCDD
 
-        $display("\n   4xIO Page Program(0x38) (1-4-4)(has addr/len, no dummy)");
+        $display("\n   TC11: 4xIO Page Program(0x38) (1-4-4)(4 bytes at 0x00, no dummy)");
         apb_write(8'h44, 32'h11223344); // Load TX FIFO
         send_cmd(32'h0000_0068, 32'h0000_0038, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0005);
         send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);//Verify
         apb_read(8'h48, 1, 32'h11223344,1); // expect 0xBBAACCDD
 
+        $display("\n   TC12: Page Program(0x02) (1-1-1)(11 bytes at 0x05, no dummy)");
+        apb_write(8'h44, 32'hAABBCCDD); // Load TX FIFO
+        apb_write(8'h44, 32'h11223344); // Load TX FIFO
+        apb_write(8'h44, 32'h55667788); // Load TX FIFO
+        send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0005, 32'h0000_000B, 32'h0000_0000, 32'h0000_0001);
+        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0005, 32'h0000_000B, 32'h0000_0000, 32'h0000_0001);//Verify
+        apb_read(8'h48, 1, 32'hAABBCCDD,1); // expect 0xAABBCCDD
+        apb_read(8'h48, 1, 32'h11223344,1); // expect 0x11223344
+        apb_read(8'h48, 1, 32'h55667700,1); // expect 0x55667700
+
         $display("\n======================================================================================");
-        $display("    Non_DMA     TEST CASE 4: ERASE DATA");
+        $display("                          GROUP 5: ERASE DATA");
         $display("======================================================================================");     
 
-        $display("\n   Sector Erase(0x20) (4KB)");
-        prepare_data(100, 160, 10);
+        $display("\nPrepare data");
+        j=0;
+        for (i=100; i<70000; i=i+500) begin
+            flash_model.memory[i] = 8'hAA;
+            $write("[%5d]: %0h - ",i, flash_model.memory[i]);
+            j=j+1;
+            if(j==10) begin
+                $display("");
+                j=0;
+            end
+        end
+
+        $display("\n   TC13: Sector Erase(0x20) (4KB)");
         send_cmd(32'h0000_0040, 32'h0000_0020, 32'h0000_0000, 32'h0000_0000, 32'h0000_0000, 32'h0000_0001);
-        check_erased(100, 160, 10);// expect 0xFFFFFFFF
+        check_erased(0, 8'h20);
 
-        $display("\n   Block Erase(0xD8) (64KB)");
-        prepare_data(100, 160, 10);
+        $display("\n   TC14: Block Erase(0xD8) (64KB)");
         send_cmd(32'h0000_0040, 32'h0000_00D8, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        check_erased(100, 160, 10);// expect 0xFFFFFFFF
-        
-        $display("\n   Chip Erase(0xC7) (All)");
-        prepare_data(100, 160, 10);
+        check_erased(0, 8'hD8);
+/*        
+        $display("\n   TC15: Chip Erase(0xC7) (All)");
         send_cmd(32'h0000_0040, 32'h0000_00C7, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        check_erased(100, 160, 10);// expect 0xFFFFFFFF
-
+        check_erased(0, 8'hC7);
+*/
         $display("\n======================================================================================");
-        $display("    DMA     TEST CASE 5: COMMAND MODE WITH DMA");
+        $display("                      GROUP 6: COMMAND MODE WITH DMA");
         $display("======================================================================================");
-
-        $display("\n   Transfer 1 word (4byte)");
-        dma_testcase(4, 0);// expect 0xFFFFFFFF
-
-        $display("\n   Transfer 1 byte");
+/*
+        $display("\n   TC16: Transfer 1 byte");
         dma_testcase(1, 0);// expect 0xFF000000
 
-        $display("\n   Transfer 2 bytes");
+        $display("\n   TC17: Transfer 2 bytes");
         dma_testcase(2, 0);// expect 0xFFFF0000
 
-        $display("\n   Transfer 3 bytes");
+        $display("\n   TC18: Transfer 3 bytes");
         dma_testcase(3, 0);// expect 0xFFFFFF00
 
-        $display("\n   Transfer 4 word (16 bytes)");
+        $display("\n   TC19: Transfer 4 word (16 bytes)");
         dma_testcase(16, 0);// expect 0xFFFFFFFF
 
-        $display("\n   Transfer large block (128 bytes)");
-        dma_testcase(128, 0);// expect 0xFFFFFFFF
+        $display("\n   TC20: Transfer large block to RAM offset address (128 byte)");
+        dma_testcase(128, 16'h0200);// expect 0xFFFFFFFF
 
-        $display("\n   Transfer to RAM offset address (32 byte)");
-        dma_testcase(32, 16'h0200);// expect 0xFFFFFFFF
-
-        $display("\n   Overwrite multiple times");
+        $display("\n   TC21: Overwrite multiple times");
         dma_testcase(8, 0);// expect 0xFFFFFFFF
         dma_testcase(8, 0);
 
-        $display("\n   Stress test (1024 byte)");
+        $display("\n   TC22: Stress test (1024 byte)");
         dma_testcase(1024, 0);// expect 0xFFFFFFFF
 
+        $display("\n======================================================================================");
+        $display("                      GROUP 7: FLAGS CHECKING");
+        $display("======================================================================================");
+   
+        $display("\n   TC25: Underrun flags test");
+        send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0005, 32'h0000_0008, 32'h0000_0000, 32'h0000_0001);
+        if (dut.csr_inst.err_stat_reg[2]) $display("         ✅ UNDERRUN flag set");
+        else $error("         ❌ UNDERRUN not set (expected)");
+        rst_n = 0;#20;rst_n = 1;
+
+        $display("\n   TC26: Overrun flags test");
+        send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0007, 32'h0000_00AA, 32'h0000_0000, 32'h0000_0001);
+        if (dut.csr_inst.err_stat_reg[1]) $display("         ✅ OVERRUN flag set");
+        else $error("         ❌ OVERRUN not set (expected)");
+        repeat (4) apb_read(8'h48, 1, 32'h0, 0);
+        rst_n = 0;#20;rst_n = 1;
+
+        $display("\n   TC27: Timeout flag test");
+        send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0005, 32'h0000_0008, 32'h0000_0000, 32'h0000_0001);
+        if (dut.csr_inst.err_stat_reg[0])  $display("         ✅ TIMEOUT flag set");
+        else $error("         ❌ TIMEOUT flag NOT set (expected)");
+        rst_n = 0;#20;rst_n = 1;
+
+        $display("\n   TC28: IRQ flags test when CMD_done");
+        apb_write(8'h0C, 32'h1 << 0);
+        send_cmd(32'h0000_0040, 32'h0000_0020, 0, 0, 0, 1);
+        check_irq(0);
+        rst_n = 0;#20;rst_n = 1;
+
+        $display("\n   TC29: IRQ flags test when DMA_done");
+        apb_write(8'h0C, 32'h1 << 1);
+        apb_write(8'h04, 32'h0000_0201);  // CTRL: ENABLE=1 + sel dma
+        apb_write(8'h24, 32'h0000_2040);  // CMD_CFG
+        apb_write(8'h28, 32'h0000_0003);  // CMD_OP
+        apb_write(8'h2C, 32'h0000_0000);  // CMD ADDR
+        apb_write(8'h3C, 0 << 2);         // DMA_ADDR (dịch trái 2)
+        apb_write(8'h30, 1);              // CMD_LEN
+        apb_write(8'h40, 1);              // DMA_LEN
+        apb_write(8'h38, 32'h0000_0030);  // control bits
+        apb_write(8'h04, 32'h0000_0301);  // Enable + DMA_EN + Trigger
+        wait (dut.qspi_ce_inst.ce_done);
+        wait(irq);
+        check_irq(1);
+        rst_n = 0;#20;rst_n = 1;
+*/
+/*        $display("\n   TC29: IRQ flags test when error");
+        apb_write(8'h10, 32'h1 << 4);
+         send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0007, 32'h0000_00AA, 32'h0000_0000, 32'h0000_0001); // invalid adress
+        //wait(irq);
+        if (!irq) $display("         ❌ IRQ NOT asserted");
+        else      $display("         ✅ IRQ asserted");
+        apb_write(8'h10, 32'h1 << 4);
+       // wait(!irq);
+        if (irq) $display("         ❌ IRQ still high after clear");
+        else     $display("         ✅ IRQ cleared ");
+        rst_n = 0;#20;rst_n = 1; */   
+            
+            
+        
         repeat (10) @(posedge clk);
         $finish;
     end

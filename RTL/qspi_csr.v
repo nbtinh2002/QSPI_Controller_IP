@@ -303,11 +303,11 @@ module qspi_csr
 	assign pslverr = invalid_addr;
 
 	// IRQ
-	assign irq = (cmd_done_en_o 	& cmd_done_reg) |
+	assign irq = ((cmd_done_en_o 	& cmd_done_reg) |
              	 (dma_done_en_o 	& dma_done_reg) |
              	 (err_en_o 			& err_reg) |
              	 (fifo_tx_empty_en_o & fifo_tx_empty_reg) |
-             	 (fifo_rx_full_en_o  & fifo_rx_full_reg);
+             	 (fifo_rx_full_en_o  & fifo_rx_full_reg)) ? 1'b1 : 1'b0;
 
 	// CTRL
 	assign enable_o 	 = ctrl_reg[0];

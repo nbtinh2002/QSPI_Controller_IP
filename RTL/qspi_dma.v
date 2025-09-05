@@ -41,9 +41,8 @@ module qspi_dma(
 	input dma_fifo_full, dma_fifo_empty,
 	input [31:0]dma_fifo_rdata, 
 	output[31:0]dma_fifo_wdata,
-	input [3:0] rx_level_i,
+	input [6:0] rx_level_i,
 	output dma_ce_done
-
 );
 
 // Connection between apb_interface and controller

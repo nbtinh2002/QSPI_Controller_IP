@@ -12,7 +12,8 @@
 //		+ DONE & ERROR FLAGS																	 //
 //===============================================================================================//
 module qspi_fsm #(
-	parameter	SUPPORT_HOLD_UP = 1
+	parameter	SUPPORT_HOLD_UP = 0,
+	parameter 	TIMEOUT_MAX = 32'd1000
 )(
 	// QPSI Interface
 	input  wire	qclk,
@@ -37,6 +38,8 @@ module qspi_fsm #(
 	input wire		 cpol,		// CTRL.bit3
 	input wire		 cpha,		// CTRL.bit4
 	input wire		 lsb_first,	// CTRL.bit5
+	input wire		 hold_en,	// CTRL.bit10
+	input wire		 wp_en,		// CTRL.bit11
 	input wire		 cs_auto,	// CS_CTRL.bit0
 	input wire		 cs_level,	// CS_CTRL.bit1
   	input wire [1:0] cs_delay,	// CS_CTRL.bit2-3
@@ -76,7 +79,6 @@ module qspi_fsm #(
 	//							CONFIGURATION & PARAMETERS										//
 	//==========================================================================================//
 	localparam [2:0] IDLE=0, CS=1, CMD=2, ADDR=3, MODE=4, DUMMY=5, DATA=6, STOP_CS=7;
-	localparam TIMEOUT_MAX = 32'd100000;
 	reg [2:0] state, next_state;
 
 	reg [1:0] 	cs_gap_cnt;
@@ -115,13 +117,13 @@ module qspi_fsm #(
 	// HOLD & WP pin control
 	generate
 		if (SUPPORT_HOLD_UP) begin : g_hold_wp
-			assign hold_n = 1'b1;
-			assign wp_n   = 1'b1;
+			assign hold_n = ~hold_en; // active-low: 0 = pause, 1 = normal
+			assign wp_n   = ~wp_en;   // active-low: 0 = write protect, 1 = write enable
 		end else begin
-			assign hold_n = 1'b1;
-			assign wp_n   = 1'b1;
+			assign hold_n = 1'b1;     // always released if not supported
+			assign wp_n   = 1'b1;     // always write-enabled if not supported
 		end
-	endgenerate	
+	endgenerate
 
 	// LSB first support for 8 bits
 	function [7:0] bit_reverse8;
@@ -194,7 +196,7 @@ module qspi_fsm #(
 				else next_state = DUMMY;
 				end
 		DATA: 	begin
-				if (underrun || overrun || timeout)	next_state = STOP_CS;
+				if (timeout_cnt>=TIMEOUT_MAX)	next_state = STOP_CS;
 				else if(byte_cnt >= cmd_len)		next_state = STOP_CS;
 				else next_state = DATA;
 				end
@@ -512,23 +514,16 @@ module qspi_fsm #(
         	timeout  <= 1'b0;
         	timeout_cnt  <= 32'd0;
     	end else begin
-			// Clear error flags at the beginning of a new transfer
-        	if(state == IDLE && start) begin
-            	underrun <= 1'b0;
-            	overrun  <= 1'b0;
-            	timeout  <= 1'b0;
-            	timeout_cnt  <= 32'd0;
-        	end
-			// Set error flags during a transfer
-        	if(state==DATA && cmd_dir==1'b0) begin
-				if(!tx_shift_valid && tx_empty && (bits_sent[2:0]==3'd0))    		
-					underrun <= 1'b1;
+			if(state == IDLE && start) begin
+				underrun <= 1'b0;
+				overrun  <= 1'b0;
+				timeout  <= 1'b0;
+				timeout_cnt  <= 32'd0;
 			end
-			// RX FIFO full and still more data to read in the last byte
-        	if(state==DATA && cmd_dir==1'b1) begin
-			 if(eff_sample && rx_full && (rx_bits_cnt+{1'b0,n_data_lanes}>=4'd8) )
-            	overrun <= 1'b1;
-			end
+			// --- Underrun detection (Write path) ---
+			if (stall_tx) underrun <= 1'b1;
+			// --- Overrun detection (Read path) ---
+			if (stall_rx) overrun <= 1'b1;
 			// Timeout detection
         	if (stall_tx || stall_rx) begin
             	if (timeout_cnt >= TIMEOUT_MAX)

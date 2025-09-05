@@ -15,7 +15,7 @@ module dma_write_axi4(
 	input 			fifo_empty,
 	input [31:0]	data_out,
 	output reg		ren,
-	input [3:0]		rx_level_i,
+	input [6:0]		rx_level_i,
 
 	//Interact with AXI4 slave
 	output reg		 axi_awvalid,

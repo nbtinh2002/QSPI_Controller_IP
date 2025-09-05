@@ -155,6 +155,8 @@ The QSPI Controller register map provides access to control, status, DMA, XIP, a
 |        |            | 5      | LSB_FIRST         | RW     | Bit order (1: LSB first)                         | 0       |
 |        |            | 8      | CMD_TRIGGER       | RW     | Start Command mode (self-clear)                  | 0       |
 |        |            | 9      | DMA_EN            | RW     | Enable DMA for Command mode                      | 0       |
+|        |            | 10     | HOLD_EN           | RW     | Controls the HOLD# pin                           | 0       |
+|        |            | 11     | WP_EN             | RW     | Controls the WP# pin                             | 0       |
 | 0x008  | STATUS     | 0      | BUSY              | RO     | Operation in progress                            | -       |
 |        |            | 1      | XIP_ACTIVE        | RO     | XIP mode active                                  | -       |
 |        |            | 2      | CMD_DONE          | RO     | Command completed                                | -       |
