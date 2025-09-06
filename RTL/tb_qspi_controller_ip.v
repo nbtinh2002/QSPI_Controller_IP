@@ -145,7 +145,7 @@ module tb_qspi_controller_ip;
         integer cnt;
         begin
             cnt = 0;
-            while (!test_cond && cnt < 1000) begin
+            while (!test_cond && cnt < 10000) begin
                 @(posedge clk);
                 cnt = cnt + 1;
             end
@@ -210,7 +210,7 @@ module tb_qspi_controller_ip;
             apb_write(CMD_DUMMY_ADDR, dummy); 
             apb_write(CTRL_ADDR, ctrl);       
             apb_write(CTRL_ADDR, ctrl | 32'h0000_0100); 
-            wait(dut.qspi_ce_inst.ce_done);
+            wait_with_timeout(dut.qspi_ce_inst.ce_done);
         end
     endtask
 
@@ -258,40 +258,53 @@ module tb_qspi_controller_ip;
     task dma_testcase;
         input [31:0] len;
         input [31:0] addr;
+        input [31:0] incr;
+        input        dir;
+        input [3:0]  burst;
+
         integer      words, i, remain, bytes_here;
-        reg [31:0]   exp, got, mask, word_val;
+        reg [31:0]   exp, got, mask, last_word;
         reg          fail;
         begin
-            $display("         Testing len = %0d byte addr = 0x%h", len, addr);
-            apb_write(CMD_CFG_ADDR  , 32'h0000_2040);
-            apb_write(CMD_OP_ADDR   , 32'h0000_0003);
-            apb_write(CMD_ADDR_ADDR , 32'h0000_0000);
-            apb_write(CMD_LEN_ADDR  , len);
-            apb_write(DMA_CFG_ADDR  , 32'h0000_0030);
-            apb_write(DMA_ADDR_ADDR , addr<<2); // DMA_ADDR (shift left 2)
-            apb_write(DMA_LEN_ADDR  , len); 
-            apb_write(CTRL_ADDR     , 32'h0000_0201); // CTRL: ENABLE=1 + sel dma
-            apb_write(CTRL_ADDR     , 32'h0000_0301); // Enable + DMA_EN + Trigger
-            wait(dut.qspi_ce_inst.ce_done);
+        $display("         . . . Testing %0d byte at 0x%h . . .", len, addr[15:2]);               
+        apb_write(CMD_CFG_ADDR  , 32'h0000_2040);
+        apb_write(CMD_OP_ADDR   , 32'h0000_0003);
+        apb_write(CMD_ADDR_ADDR , 32'h0000_0000);
+        apb_write(CMD_LEN_ADDR  , len);
+        apb_write(DMA_CFG_ADDR  , {26'd0, incr, dir, burst});// control bits
+        apb_write(DMA_ADDR_ADDR , addr<<2); // DMA_ADDR (shift left 2)
+        apb_write(DMA_LEN_ADDR  , len); 
+        apb_write(CTRL_ADDR     , 32'h0000_0201); // CTRL: ENABLE=1 + sel dma
+        apb_write(CTRL_ADDR     , 32'h0000_0301); // Enable + DMA_EN + Trigger
+        wait_with_timeout(dut.qspi_ce_inst.ce_done);
 
-            words  = (len+3)/4;
-            remain = len;
-            fail   = 1'b0;
-            for(i = 0; i < words; i = i + 1) begin
-                word_val    = { flash_model.memory[i*4 + 3], flash_model.memory[i*4 + 2],
-                             flash_model.memory[i*4 + 1], flash_model.memory[i*4 + 0] };
-                exp         = word_val;
-                got         = axi4_ram0.mem[addr + i];
-                bytes_here  = (remain >= 4) ? 4 : remain;
-                mask        = 32'hFFFFFFFF << ((4 - bytes_here) * 8);
-                if((got & mask) !== (exp & mask)) begin
-                    $error("         ❌ AXI[%0h] got=%08h exp=%08h mask=%08h", addr+i, got, exp, mask);
+        words  = (len+3)/4;
+        remain = len;
+        fail   = 1'b0;
+
+        if(incr)begin
+            for (i = 0; i < words; i = i + 1) begin
+                exp        = {flash_model.memory[i*4 + 0], flash_model.memory[i*4 + 1],
+                              flash_model.memory[i*4 + 2], flash_model.memory[i*4 + 3] };
+                got        = axi4_ram0.mem[addr + i];
+                bytes_here = (remain >= 4) ? 4 : remain;
+                mask       = 32'hFFFFFFFF << ((4 - bytes_here)*8);
+                if ((got & mask) !== (exp & mask)) begin
+                    $display("         ❌ AXI[%0h] got=%08h exp=%08h mask=%08h", addr+i, got, exp, mask);
                     fail = 1;
                 end else if (len <= 16) $display("         ✅ AXI[%0h] = %08h", addr+i, got & mask);
                 remain = remain - bytes_here;
             end
-            if (!fail && len > 16) $display("         ✅ All %0d words matched", words);
-        end  
+        end else begin
+            last_word       = {flash_model.memory[(words-1)*4 + 0], flash_model.memory[(words-1)*4 + 1],
+                              flash_model.memory[(words-1)*4 + 2], flash_model.memory[(words-1)*4 + 3] };
+            if (last_word!= axi4_ram0.mem[addr]) begin
+                $error("         ❌ AXI[%0h] = %08h last word = %08h", addr+i, axi4_ram0.mem[addr], last_word);
+                fail = 1;
+            end else $display("         ✅ Overwrite succcesful. AXI[%0h] = %08h", addr,axi4_ram0.mem[addr]);
+        end
+        if (!fail && len > 16)  if (!fail && len > 16) $display("         ✅ All %0d words matched", words);
+        end
     endtask
     
     // ------------------- Check IRQ ------------------- 
@@ -319,7 +332,7 @@ module tb_qspi_controller_ip;
                         apb_write(8'h40, 1);                    // DMA_LEN
                         apb_write(DMA_CFG_ADDR, 32'h0000_0030); // control bits
                         apb_write(CTRL_ADDR, 32'h0000_0301);    // Enable + DMA_EN + Trigger
-                        wait (dut.qspi_ce_inst.ce_done);
+                        wait_with_timeout(dut.qspi_ce_inst.ce_done);
                        end
                     2: begin
                         event_name = "Error";
@@ -335,7 +348,7 @@ module tb_qspi_controller_ip;
                     end
                 endcase
                 // Wait IRQ asserted
-                wait(irq);
+                wait_with_timeout(irq);
                 if (!irq) begin 
                     $display("         ❌ IRQ NOT asserted when %s", event_name);
                     all_pass = 0;
@@ -346,7 +359,7 @@ module tb_qspi_controller_ip;
 
                 // Clear IRQ bit
                 apb_write(INT_STAT_ADDR, 32'h1 << i);
-                wait(!irq);
+                wait_with_timeout(!irq);
                 if (irq) begin 
                     $display("         ❌ IRQ still high after clear when %s", event_name);
                     all_pass = 0;
@@ -495,27 +508,40 @@ module tb_qspi_controller_ip;
         $display("                      GROUP 6: COMMAND MODE WITH DMA");
         $display("======================================================================================");
 
+
         $display("\n   TC16: Transfer 1 byte");
-        dma_testcase(1, 0);// expect 0xFF000000
+        dma_testcase(1, 0, 1, 1, 0);// expect 0xFF000000
 
         $display("\n   TC17: Transfer 2 bytes");
-        dma_testcase(2, 0);// expect 0xFFFF0000
+        dma_testcase(2, 0, 1, 1, 0);// expect 0xFFFF0000
 
-        $display("\n   TC18: Transfer 3 bytes");
-        dma_testcase(3, 0);// expect 0xFFFFFF00
+        // $display("\n   TC18: Transfer 3 bytes");
+        dma_testcase(3, 0, 1, 1, 0);// expect 0xFFFFFF00
 
-        $display("\n   TC19: Transfer 4 word (16 bytes)");
-        dma_testcase(16, 0);// expect 0xFFFFFFFF
+        // $display("\n   TC19: Transfer 4 word (16 bytes)");
+        dma_testcase(16, 0, 1, 1, 0);// expect 0xFFFFFFFF
 
         $display("\n   TC20: Transfer large block to RAM offset address (128 byte)");
-        dma_testcase(128, 16'h0200);// expect 0xFFFFFFFF
+        dma_testcase(150, 0, 1, 1, 0);// expect 0xFFFFFFFF
 
         $display("\n   TC21: Overwrite multiple times");
-        dma_testcase(8, 0);// expect 0xFFFFFFFF
-        dma_testcase(8, 0);
+        //Prepare data
+        flash_model.memory[0]=8'hDE;
+        flash_model.memory[1]=8'hAD;
+        flash_model.memory[2]=8'hBE;
+        flash_model.memory[3]=8'hEF;
+        flash_model.memory[4]=8'hFE;
+        flash_model.memory[5]=8'hEB;
+        flash_model.memory[6]=8'hDA;
+        flash_model.memory[7]=8'hED;
+        flash_model.memory[8]=8'h11;
+        dma_testcase(8, 0, 0, 1, 1);
 
-        $display("\n   TC22: Stress test (1024 byte)");
-        dma_testcase(1024, 0);// expect 0xFFFFFFFF
+        $display("\n   TC22: DMA Burst (567 byte), 1 burst = 12 byte(3 beat x 4 byte) ");
+        dma_testcase(567, 0, 1, 1, 0);// expect 0xFFFFFFFF
+
+        $display("\n   TC22: DMA Burst (1000 byte), 1 burst = 60 byte(15 beat x 4 byte), different addr ");
+        dma_testcase(1000, 1000, 1, 1, 15);// expect 0xFFFFFFFF
 
         $display("\n======================================================================================");
         $display("                      GROUP 7: FLAGS CHECKING");

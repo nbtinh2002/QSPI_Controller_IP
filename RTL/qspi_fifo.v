@@ -56,42 +56,54 @@ module qspi_fifo #(
     integer word_idx;
     integer byte_off;
 
-    //==== Write ====
-    always @(posedge clk or negedge resetn) begin
-        if (!resetn) begin
-            wr_byte_ptr <= 0;
-        end else if (wr_en && !full) begin
-            for (i=0;i<WR_BYTES;i=i+1) begin
-                addr_byte = wr_byte_ptr + i;
-                word_idx  = addr_byte / WORD_BYTES;
-                byte_off  = addr_byte % WORD_BYTES;
-                mem[word_idx][8*(WORD_BYTES-1-byte_off) +:8] 
-                    <= data_in[8*(WR_BYTES-i)-1 -:8];
-            end
-            wr_byte_ptr <= (wr_byte_ptr + WR_BYTES) % TOTAL_BYTES;
+    //==== Write Pointer Wrap-around ====
+always @(posedge clk or negedge resetn) begin
+    if (!resetn) begin
+        wr_byte_ptr <= 0;
+    end else if (wr_en && !full) begin
+        for (i=0; i<WR_BYTES; i=i+1) begin
+            addr_byte = wr_byte_ptr + i;
+            if (addr_byte >= TOTAL_BYTES) addr_byte = addr_byte - TOTAL_BYTES;
+            word_idx = addr_byte >> 2;          // addr / WORD_BYTES
+            byte_off = addr_byte[1:0];          // addr % WORD_BYTES
+
+            mem[word_idx][8*(WORD_BYTES-1-byte_off) +: 8]
+                <= data_in[8*(WR_BYTES-i)-1 -: 8];
+            mem[word_idx][8*(WORD_BYTES-1-byte_off) +:8] 
+                <= data_in[8*(WR_BYTES-i)-1 -:8];
         end
+        if (wr_byte_ptr + WR_BYTES >= TOTAL_BYTES)
+            wr_byte_ptr <= wr_byte_ptr + WR_BYTES - TOTAL_BYTES;
+        else
+            wr_byte_ptr <= wr_byte_ptr + WR_BYTES;
     end
+end
 
-    //==== Read ====
-    always @(posedge clk or negedge resetn) begin
-        if (!resetn) begin
-            rd_byte_ptr <= 0;
-            data_out    <= {8*RD_BYTES{1'b0}};
-        end else if (rd_en && !empty) begin
-            for (i=0;i<RD_BYTES;i=i+1) begin
-                addr_byte = rd_byte_ptr + i;
-                word_idx  = addr_byte / WORD_BYTES;
-                byte_off  = addr_byte % WORD_BYTES;
-                if (i<take_bytes)
-                    data_out[8*(RD_BYTES-i)-1 -:8] 
-                        <= mem[word_idx][8*(WORD_BYTES-1-byte_off) +:8];
-                else
-                    data_out[8*(RD_BYTES-i)-1 -:8] <= 8'h00;
-            end
-            rd_byte_ptr <= (rd_byte_ptr + take_bytes) % TOTAL_BYTES ;
-        end 
+
+   //==== Read Pointer Wrap-around ====
+always @(posedge clk or negedge resetn) begin
+    if (!resetn) begin
+        rd_byte_ptr <= 0;
+        data_out    <= {8*RD_BYTES{1'b0}};
+    end else if (rd_en && !empty) begin
+        for (i=0; i<RD_BYTES; i=i+1) begin
+            addr_byte = rd_byte_ptr + i;
+            if (addr_byte >= TOTAL_BYTES) addr_byte = addr_byte - TOTAL_BYTES;
+            word_idx = addr_byte >> 2;          // addr / WORD_BYTES
+            byte_off = addr_byte[1:0];          // addr % WORD_BYTES
+
+            if (i < take_bytes)
+                data_out[8*(RD_BYTES-i)-1 -:8] 
+                    <= mem[word_idx][8*(WORD_BYTES-1-byte_off) +:8];
+            else
+                data_out[8*(RD_BYTES-i)-1 -:8] <= 8'h00;
+        end
+        if (rd_byte_ptr + take_bytes >= TOTAL_BYTES)
+            rd_byte_ptr <= rd_byte_ptr + take_bytes - TOTAL_BYTES;
+        else
+            rd_byte_ptr <= rd_byte_ptr + take_bytes;
     end
-
+end
     //==== Level (byte counter) ====
     always @(posedge clk or negedge resetn) begin
         if (!resetn) begin
