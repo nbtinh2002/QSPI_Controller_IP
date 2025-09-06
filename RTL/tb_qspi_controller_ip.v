@@ -188,8 +188,8 @@ module tb_qspi_controller_ip;
             wait(dut.csr_inst.read);
             repeat(2) @(posedge clk);
             if(check_enable) begin
-                if(dut.csr_inst.rx_data_i==expect_data) $display("        ✅ DATA READ: 0x%h",dut.csr_inst.rx_data_i);
-                else  $display("        ❌ ERROR: DATA READ: 0x%h, EXPECT: 0x%h",dut.csr_inst.rx_data_i, expect_data);   
+                if(dut.csr_inst.rx_data_i==expect_data) $display("          ✅ DATA READ: 0x%h",dut.csr_inst.rx_data_i);
+                else  $display("          ❌ ERROR: DATA READ: 0x%h, EXPECT: 0x%h",dut.csr_inst.rx_data_i, expect_data);   
             end 
         end
     endtask

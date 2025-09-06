@@ -11,7 +11,7 @@ parameter MEM_SIZE = 1024 * 1024; // 1MiB
 parameter ADDR_BITS = 24; // 3 bytes 
 parameter PAGE_SIZE = 256;
 parameter SECTOR_SIZE = 4096;
-parameter ERASE_TIME = 71;
+parameter ERASE_TIME = 100;
 
 reg [3:0] io_oe = 0;
 reg [3:0] io_do = 0;
