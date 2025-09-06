@@ -80,7 +80,8 @@ module qspi_fsm #(
 	//==========================================================================================//
 	localparam [2:0] IDLE=0, CS=1, CMD=2, ADDR=3, MODE=4, DUMMY=5, DATA=6, STOP_CS=7;
 	reg [2:0] state, next_state;
-
+	
+	reg [31:0] timeout_cnt;
 	reg [1:0] 	cs_gap_cnt;
 	reg       	gap_active, cs_n_reg;
 
@@ -501,7 +502,6 @@ module qspi_fsm #(
 	//==========================================================================================//
     //								DONE & ERROR FLAGS											//
     //==========================================================================================//
-	reg [31:0] timeout_cnt;
 
 	// Done signal generation
 	assign done = (state==STOP_CS && next_state==IDLE);	

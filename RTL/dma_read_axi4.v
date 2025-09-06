@@ -1,4 +1,3 @@
-
 module dma_read_axi4(
 	// Clock and reset
 	input wire			clk,

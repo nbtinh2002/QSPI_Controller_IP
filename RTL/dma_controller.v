@@ -1,4 +1,3 @@
-
 module dma_controller(
 	// Clock and reset
     input wire	        clk,
