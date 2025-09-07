@@ -492,15 +492,15 @@ module tb_qspi_controller_ip;
         //        j=0;
         //    end
         //end
-        $display("\n   TC: Sector Erase(0x20) (4KB)");
+        $display("\n   TC13: Sector Erase(0x20) (4KB)");
         send_cmd(32'h0000_0040, 32'h0000_0020, 32'h0000_0000, 32'h0000_0000, 32'h0000_0000, 32'h0000_0001);
         erase_testcase(0, 8'h20);
 
-        $display("\n   TC: Block Erase(0xD8) (64KB)");
+        $display("\n   TC14: Block Erase(0xD8) (64KB)");
         send_cmd(32'h0000_0040, 32'h0000_00D8, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         erase_testcase(0, 8'hD8);
 /*        
-        $display("\n   TC: Chip Erase(0xC7) (All)");
+        $display("\n   TC15: Chip Erase(0xC7) (All)");
         send_cmd(32'h0000_0040, 32'h0000_00C7, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         erase_testcase(0, 8'hC7);
 */
@@ -515,10 +515,10 @@ module tb_qspi_controller_ip;
         $display("\n   TC17: Transfer 2 bytes");
         dma_testcase(2, 0, 1, 1, 0);// expect 0xFFFF0000
 
-        // $display("\n   TC18: Transfer 3 bytes");
+        $display("\n   TC18: Transfer 3 bytes");
         dma_testcase(3, 0, 1, 1, 0);// expect 0xFFFFFF00
 
-        // $display("\n   TC19: Transfer 4 word (16 bytes)");
+        $display("\n   TC19: Transfer 4 word (16 bytes)");
         dma_testcase(16, 0, 1, 1, 0);// expect 0xFFFFFFFF
 
         $display("\n   TC20: Transfer large block to RAM offset address (128 byte)");
@@ -540,33 +540,33 @@ module tb_qspi_controller_ip;
         $display("\n   TC22: DMA Burst (567 byte), 1 burst = 12 byte(3 beat x 4 byte) ");
         dma_testcase(567, 0, 1, 1, 0);// expect 0xFFFFFFFF
 
-        $display("\n   TC22: DMA Burst (1000 byte), 1 burst = 60 byte(15 beat x 4 byte), different addr ");
+        $display("\n   TC23: DMA Burst (1000 byte), 1 burst = 60 byte(15 beat x 4 byte), different addr ");
         dma_testcase(1000, 1000, 1, 1, 15);// expect 0xFFFFFFFF
 
         $display("\n======================================================================================");
         $display("                      GROUP 7: FLAGS CHECKING");
         $display("======================================================================================");
    
-        $display("\n   TC: Underrun flags test");
+        $display("\n   TC24: Underrun flags test");
         send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0005, 32'h0000_0008, 32'h0000_0000, 32'h0000_0001);
         if (dut.csr_inst.err_stat_reg[2]) $display("         ✅ UNDERRUN flag set");
         else $error("         ❌ UNDERRUN not set (expected)");
         rst_n = 0;#20;rst_n = 1;
 
-        $display("\n   TC: Overrun flags test");
+        $display("\n   TC25: Overrun flags test");
         send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0007, 32'h0000_00AA, 32'h0000_0000, 32'h0000_0001);
         if (dut.csr_inst.err_stat_reg[1]) $display("         ✅ OVERRUN flag set");
         else $error("         ❌ OVERRUN not set (expected)");
         repeat (4) apb_read(8'h48, 32'h0, 0);
         rst_n = 0;#20;rst_n = 1;
 
-        $display("\n   TC: Timeout flag test");
+        $display("\n   TC26: Timeout flag test");
         send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0005, 32'h0000_0008, 32'h0000_0000, 32'h0000_0001);
         if (dut.csr_inst.err_stat_reg[0])  $display("         ✅ TIMEOUT flag set");
         else $error("         ❌ TIMEOUT flag NOT set (expected)");
         rst_n = 0;#20;rst_n = 1;
 
-        $display("\n   TC: IRQ output test");
+        $display("\n   TC27: IRQ output test");
         check_auto_irq;
 
         repeat (10) @(posedge clk);
