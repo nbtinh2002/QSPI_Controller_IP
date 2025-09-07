@@ -112,7 +112,7 @@ always @(posedge qspi_sclk or posedge qspi_cs_n) begin
                             status_reg[1] <= 0;
                             state <= ST_IDLE;
                         end
-                        8'h03, 8'h0B, 8'hBB, 8'hEB: begin// READ DATA
+                        8'h03, 8'h0B, 8'h3B, 8'h6B, 8'hBB, 8'hEB: begin// READ DATA
                             state <= ST_ADDR;
                             addr_reg <= 0;
                             shift_in <= 0;

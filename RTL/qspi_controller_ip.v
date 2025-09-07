@@ -50,7 +50,7 @@ module qspi_controller_ip#(
 );
 	// ------------------- Internal signals -------------------
 	wire		enable, xip_en, quad_en, cpol, cpha, lsb_first, cmd_trigger, dma_en, hold_en, wp_en;
-	wire 		ce_busy, ce_done, dma_done, qspi_done, ce_start, dma_start;
+	wire 		xip_active, ce_busy, ce_done, dma_done, qspi_done, ce_start, dma_start;
 	wire [2:0]	clk_div;
 	wire 		cs_auto, cs_level;
 	wire [1:0]	cs_delay;
@@ -92,7 +92,7 @@ module qspi_controller_ip#(
 		.cmd_trigger_o(cmd_trigger),
 		.dma_en_o(dma_en), .hold_en_o(hold_en), .wp_en_o(wp_en),
 		// STATUS
-		.busy_i(ce_busy), .xip_active_i(1'b0), .cmd_done_i(ce_done), .dma_done_i(dma_done),
+		.busy_i(ce_busy), .xip_active_i(xip_active), .cmd_done_i(ce_done), .dma_done_i(dma_done),
 		// INT_STAT
 		.cmd_done_set_i(ce_done),												
 		.dma_done_set_i(dma_done),
