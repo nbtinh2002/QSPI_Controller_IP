@@ -16,8 +16,8 @@ module qspi_fsm #(
 	parameter 	TIMEOUT_MAX = 32'd1000
 )(
 	// QPSI Interface
-	input  wire	qclk,
-	input  wire	qresetn,
+	input  wire	clk,
+	input  wire	resetn,
 	output wire	sclk,
 	output wire	cs_n,
 	output wire	hold_n,
@@ -63,10 +63,10 @@ module qspi_fsm #(
 	input wire [7:0]  xip_write_op,		// XIP_CMD.bit8-15
 
   	// FIFO signals (TX: IP -> flash | RX: flash -> IP)
-	input  wire [7:0] tx_data_fifo,
+	input  wire [7:0] qspi_data_i,
 	input  wire		  tx_empty,
 	output reg		  tx_ren,
-	output reg [7:0]  rx_data_fifo,
+	output reg [7:0]  qspi_data_o,
 	input  wire		  rx_full,
 	output wire		  rx_wen,
 	
@@ -157,8 +157,8 @@ module qspi_fsm #(
 	//										STATE MACHINE										//						
 	//==========================================================================================//	
 	// State register
-	always@(posedge qclk or negedge qresetn) begin
-		if(!qresetn) state	<= IDLE;
+	always@(posedge clk or negedge resetn) begin
+		if(!resetn) state	<= IDLE;
 		else 		 state	<= next_state;
 	end
 
@@ -210,8 +210,8 @@ module qspi_fsm #(
     //									CS_DELAY & CS_N											//
     //==========================================================================================//
 	// CS gap counter
-	always @(posedge qclk or negedge qresetn) begin
-    	if (!qresetn) begin
+	always @(posedge clk or negedge resetn) begin
+    	if (!resetn) begin
         	cs_gap_cnt <= 2'd0;
         	gap_active <= 1'b0;
     	end else if (state==STOP_CS && next_state==IDLE && cs_auto) begin
@@ -227,8 +227,8 @@ module qspi_fsm #(
 	end
 
 	// CS_N generation
-	always @(posedge qclk or negedge qresetn) begin
-		if(!qresetn) begin
+	always @(posedge clk or negedge resetn) begin
+		if(!resetn) begin
 			cs_n_reg <= 1'b1;  
 		end else if (!cs_auto) begin
 			cs_n_reg <= cs_level;
@@ -248,8 +248,8 @@ module qspi_fsm #(
 	wire cs_active = (state!=IDLE && state!=STOP_CS);
 	
 	// CPOL & CPHA latch
-	always@(posedge qclk or negedge qresetn) begin
-		if(!qresetn) begin
+	always@(posedge clk or negedge resetn) begin
+		if(!resetn) begin
 			cpol_lat <= 1'b0;
 			cpha_lat <= 1'b0;
 			clk_div_lat <= 3'd0;
@@ -261,8 +261,8 @@ module qspi_fsm #(
 	end
 
 	// SCLK generation
-	always@(posedge qclk or negedge qresetn) begin
-		if(!qresetn) begin
+	always@(posedge clk or negedge resetn) begin
+		if(!resetn) begin
 			div_cnt		<= 8'd0;
 			sclk_core	<= cpol;
 		end else if(clk_div != 0) begin
@@ -274,7 +274,7 @@ module qspi_fsm #(
 			end
 		end
 	end
-	assign sclk = cs_active ? ((clk_div_lat!=0) ? (sclk_core ^ cpol_lat) : (qclk ^ cpol_lat)) 
+	assign sclk = cs_active ? ((clk_div_lat!=0) ? (sclk_core ^ cpol_lat) : (clk ^ cpol_lat)) 
 							: cpol_lat;
 	// Edge detection
 	wire leading_edge  = cpol_lat ? !sclk : sclk;
@@ -330,8 +330,8 @@ module qspi_fsm #(
 	wire eff_shift = edge_shift && (!(stall_tx || stall_rx));
 
 	// Shift registers
-	always @(posedge qclk or negedge qresetn) begin 
-		if(!qresetn) begin
+	always @(posedge clk or negedge resetn) begin 
+		if(!resetn) begin
 			cmd_shift_reg		<=  8'h0;
         	addr32_shift_reg	<= 32'h0;
 			addr24_shift_reg	<= 32'h0;
@@ -352,7 +352,7 @@ module qspi_fsm #(
 						end
 				MODE: 	mode_shift_reg <= lsb_first ? bit_reverse8(mode_bits) : mode_bits;
 				DATA:	if(!cmd_dir) begin
-							tx_shift_reg   <= lsb_first ? bit_reverse8(tx_data_fifo) : tx_data_fifo;
+							tx_shift_reg   <= lsb_first ? bit_reverse8(qspi_data_i) : qspi_data_i;
 							tx_ren_latch   <= 1'b0;
 						end
 				default:;
@@ -402,10 +402,10 @@ module qspi_fsm #(
 					end
 					DATA:begin
 						case(n_data_lanes)
-							3'd1: tx_shift_reg <= (bits_cnt==4'd7) ? tx_data_fifo: {tx_shift_reg[6:0],1'b0};
-							3'd2: tx_shift_reg <= (bits_cnt==4'd0) ? tx_data_fifo: {tx_shift_reg[5:0],2'b00};
+							3'd1: tx_shift_reg <= (bits_cnt==4'd7) ? qspi_data_i: {tx_shift_reg[6:0],1'b0};
+							3'd2: tx_shift_reg <= (bits_cnt==4'd0) ? qspi_data_i: {tx_shift_reg[5:0],2'b00};
 							3'd4: begin
-								  if(bits_cnt==4'd4) tx_shift_reg <= lsb_first ? bit_reverse8(tx_data_fifo) : tx_data_fifo;
+								  if(bits_cnt==4'd4) tx_shift_reg <= lsb_first ? bit_reverse8(qspi_data_i) : qspi_data_i;
 								  else tx_shift_reg <= {tx_shift_reg[3:0],4'b0000};
 							end
 						endcase
@@ -419,8 +419,8 @@ module qspi_fsm #(
 	//								SAMPLE DATA (READ)											//
 	//==========================================================================================//
 	// RX bit counter & start flag
-	always @(posedge qclk or negedge qresetn) begin //Counter & Flags
-		if (!qresetn) begin
+	always @(posedge clk or negedge resetn) begin //Counter & Flags
+		if (!resetn) begin
 			rx_bits_cnt   <= 4'd0;
 			rx_started     <= 1'b0;  
 		end else begin
@@ -439,20 +439,20 @@ module qspi_fsm #(
 	end
 
 	// Shift data to RX FIFO
-	always @(negedge qclk or negedge qresetn) begin
-		if (!qresetn) begin
+	always @(negedge clk or negedge resetn) begin
+		if (!resetn) begin
 			rx_shift_reg   <= 8'h00;
-			rx_data_fifo   <= 8'h00;
+			qspi_data_o   <= 8'h00;
 		end else begin
 			case(n_data_lanes)
 			3'd1: 	if ((rx_bits_cnt == 4'd0) && rx_started && !rx_full) begin
-						rx_data_fifo <= lsb_first ? bit_reverse8({rx_shift_reg[6:0], io_in[1]})   : {rx_shift_reg[6:0], io_in[1]};
+						qspi_data_o <= lsb_first ? bit_reverse8({rx_shift_reg[6:0], io_in[1]})   : {rx_shift_reg[6:0], io_in[1]};
 					end
 			3'd2: 	if ((rx_bits_cnt + {1'b0,n_data_lanes}) >= 4'd8 && rx_started && !rx_full) begin
-						rx_data_fifo <= lsb_first ? bit_reverse8({rx_shift_reg[5:0], io_in[1:0]}) : {rx_shift_reg[5:0], io_in[1:0]};
+						qspi_data_o <= lsb_first ? bit_reverse8({rx_shift_reg[5:0], io_in[1:0]}) : {rx_shift_reg[5:0], io_in[1:0]};
 					end
 			3'd4: 	if ((rx_bits_cnt == 4'd0) && rx_started && !rx_full) begin
-						rx_data_fifo <= lsb_first ? bit_reverse8({rx_shift_reg[3:0], io_in[3:0]}) : {rx_shift_reg[3:0], io_in[3:0]};
+						qspi_data_o <= lsb_first ? bit_reverse8({rx_shift_reg[3:0], io_in[3:0]}) : {rx_shift_reg[3:0], io_in[3:0]};
 					end
 			endcase
 			if (next_state==DATA && cmd_dir==1'b1 && eff_sample) begin
@@ -470,8 +470,8 @@ module qspi_fsm #(
 	// 										COUNTER												//
 	//==========================================================================================//
 	// Bit/Byte/Dummy counter
-	always@(posedge qclk or negedge qresetn) begin 
-		if (!qresetn) begin
+	always@(posedge clk or negedge resetn) begin 
+		if (!resetn) begin
 			byte_cnt  <= 32'd0;
 			bits_sent <= 6'd0;
 			bits_cnt  <= 4'd0;
@@ -507,8 +507,8 @@ module qspi_fsm #(
 	assign done = (state==STOP_CS && next_state==IDLE);	
 
 	// Error flag generation
-	always@(posedge qclk or negedge qresetn) begin
-    	if(!qresetn) begin
+	always@(posedge clk or negedge resetn) begin
+    	if(!resetn) begin
       		underrun <= 1'b0;
         	overrun  <= 1'b0;
         	timeout  <= 1'b0;

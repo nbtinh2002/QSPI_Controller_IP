@@ -32,7 +32,7 @@ run: compile
 	$(VVP) $(BIN)
 
 
-wave: run
+wave: 
 	@echo "[Waveform] Launching GTKWave..."
 	GTK_DEBUG=none $(GTKWAVE) $(VCD) > /dev/null 2>&1 &
 

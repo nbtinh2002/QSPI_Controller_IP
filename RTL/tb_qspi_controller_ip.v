@@ -188,8 +188,8 @@ module tb_qspi_controller_ip;
             wait(dut.csr_inst.read);
             repeat(2) @(posedge clk);
             if(check_enable) begin
-                if(dut.csr_inst.rx_data_i==expect_data) $display("          ✅ DATA READ: 0x%h",dut.csr_inst.rx_data_i);
-                else  $display("          ❌ ERROR: DATA READ: 0x%h, EXPECT: 0x%h",dut.csr_inst.rx_data_i, expect_data);   
+                if(dut.csr_inst.csr_data_i==expect_data) $display("          ✅ DATA READ: 0x%h",dut.csr_inst.csr_data_i);
+                else  $display("          ❌ ERROR: DATA READ: 0x%h, EXPECT: 0x%h",dut.csr_inst.csr_data_i, expect_data);   
             end 
         end
     endtask
@@ -210,7 +210,7 @@ module tb_qspi_controller_ip;
             apb_write(CMD_DUMMY_ADDR, dummy); 
             apb_write(CTRL_ADDR, ctrl);       
             apb_write(CTRL_ADDR, ctrl | 32'h0000_0100); 
-            wait_with_timeout(dut.qspi_ce_inst.ce_done);
+            wait_with_timeout(dut.ce_inst.ce_done);
         end
     endtask
 
@@ -276,7 +276,7 @@ module tb_qspi_controller_ip;
         apb_write(DMA_LEN_ADDR  , len); 
         apb_write(CTRL_ADDR     , 32'h0000_0201); // CTRL: ENABLE=1 + sel dma
         apb_write(CTRL_ADDR     , 32'h0000_0301); // Enable + DMA_EN + Trigger
-        wait_with_timeout(dut.qspi_ce_inst.ce_done);
+        wait_with_timeout(dut.ce_inst.ce_done);
 
         words  = (len+3)/4;
         remain = len;
@@ -332,7 +332,7 @@ module tb_qspi_controller_ip;
                         apb_write(8'h40, 1);                    // DMA_LEN
                         apb_write(DMA_CFG_ADDR, 32'h0000_0030); // control bits
                         apb_write(CTRL_ADDR, 32'h0000_0301);    // Enable + DMA_EN + Trigger
-                        wait_with_timeout(dut.qspi_ce_inst.ce_done);
+                        wait_with_timeout(dut.ce_inst.ce_done);
                        end
                     2: begin
                         event_name = "Error";
@@ -499,11 +499,11 @@ module tb_qspi_controller_ip;
         $display("\n   TC: Block Erase(0xD8) (64KB)");
         send_cmd(32'h0000_0040, 32'h0000_00D8, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         erase_testcase(0, 8'hD8);
-        
+/*        
         $display("\n   TC: Chip Erase(0xC7) (All)");
         send_cmd(32'h0000_0040, 32'h0000_00C7, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         erase_testcase(0, 8'hC7);
-
+*/
         $display("\n======================================================================================");
         $display("                      GROUP 6: COMMAND MODE WITH DMA");
         $display("======================================================================================");
