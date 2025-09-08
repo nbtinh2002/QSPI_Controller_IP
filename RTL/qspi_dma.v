@@ -21,6 +21,7 @@ module qspi_dma(
 	input  wire [31:0]  dma_data_i,
     output wire [31:0]  dma_data_o,
 	input  wire [6:0]   rx_level_i,
+    input  wire [6:0]   tx_level_i,
 
 	//DMA AXI4 Interface
 	output reg			axi_arvalid,
@@ -99,7 +100,10 @@ wire[3:0]   dma_burst_size;
         .axi_arready(axi_arready),
         .axi_rvalid(axi_rvalid),
         .axi_rdata(axi_rdata),
-        .axi_rready(axi_rready)
+        .axi_rready(axi_rready),
+        .tx_level_i(tx_level_i),
+        .incr_addr_i(incr_addr),
+        .dma_burst_size_i(dma_burst_size)
     );
 
 	//DMA write_axi4_interface module

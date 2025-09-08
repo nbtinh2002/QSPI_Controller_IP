@@ -51,7 +51,7 @@ module qspi_csr#(
 	output wire			xip_mode_en_o,
 	output wire	[3:0]	xip_dummy_cycles_o,
 	output wire			xip_cont_read_o,
-	output wire			xip_write_o,
+	output wire			xip_write_en_o,
 	// XIP_CMD outputs
 	output wire [7:0]	xip_read_op_o,
 	output wire [7:0]	xip_write_op_o,
@@ -306,7 +306,7 @@ module qspi_csr#(
 	assign xip_mode_en_o		= xip_cfg_reg[8];
 	assign xip_dummy_cycles_o	= xip_cfg_reg[12:9];
 	assign xip_cont_read_o		= xip_cfg_reg[13];
-	assign xip_write_o			= xip_cfg_reg[14];
+	assign xip_write_en_o			= xip_cfg_reg[14];
 
 	// XIP_CMD
 	assign xip_read_op_o		= xip_cmd_reg[7:0];

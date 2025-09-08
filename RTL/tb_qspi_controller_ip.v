@@ -47,39 +47,37 @@ module tb_qspi_controller_ip;
     wire io0, io1, io2, io3;
     wire irq;
 
-    // AXI4 Master Signals
+    // AXI4 Interface ưith DMA
     wire [31:0] m_awaddr;
     wire        m_awvalid;
     reg         m_awready;
-    //wire [3:0]  m_awid; 
-    //wire [7:0]  m_awlen;
-    //wire [2:0]  m_awsize; 
-    //wire [1:0]  m_awburst;
     wire [31:0] m_wdata;
     wire [3:0]  m_wstrb;
     wire        m_wvalid;
     reg         m_wready;
-    //wire        m_wlast;
-    //wire        m_wuser;
     reg         m_bvalid;
     wire        m_bready;
-    //reg [3:0]   m_bid;
-    //reg [1:0]   m_bresp;
-    //reg         m_buser;
     wire [31:0] m_araddr;
     wire        m_arvalid;
     reg         m_arready;
-    //wire [3:0]  m_arid;
-    //wire [7:0]  m_arlen;
-    //wire [2:0]  m_arsize;
-    //wire [1:0]  m_arburst;
     reg [31:0]  m_rdata;
     reg         m_rvalid;
     wire        m_rready;
-    //reg [3:0]   m_rid;
-    //reg [1:0]   m_rresp;
-    //reg         m_rlast;
-    //reg         m_ruser;
+
+	// AXI4 Interface with XIP
+    reg         s_arvalid;
+    wire        s_arready;
+
+
+    reg  [31:0] s_araddr;
+    reg  [7:0]  s_arlen;
+    reg  [2:0]  s_arsize;
+    reg  [1:0]  s_arburst;
+
+    wire [31:0] s_rdata;
+    wire        s_rlast;
+    wire        s_rvalid;
+    reg         s_rready;
 
     // ------------------- DUT Instance -------------------
     apb_master apb_m (
@@ -99,6 +97,7 @@ module tb_qspi_controller_ip;
         .pready(pready), .pslverr(pslverr),
         .sclk(sclk), .cs_n(cs_n),.hold_n(hold_n), .wp_n(wp_n),
         .io0(io0), .io1(io1), .io2(io2), .io3(io3),
+
         // Write address
         .m_awvalid(m_awvalid), .m_awaddr (m_awaddr), .m_awready(m_awready),
         // Write data
@@ -108,7 +107,14 @@ module tb_qspi_controller_ip;
         // Read address
         .m_arvalid(m_arvalid), .m_araddr(m_araddr), .m_arready(m_arready),
         // Read data
-        .m_rvalid(m_rvalid), .m_rdata(m_rdata), .m_rready(m_rready)
+        .m_rvalid(m_rvalid), .m_rdata(m_rdata), .m_rready(m_rready),
+       
+        // Read Address
+        .s_arvalid(s_arvalid), .s_arready(s_arready), 
+        .s_araddr(s_araddr), .s_arlen(s_arlen), 
+		.s_arsize(s_arsize), .s_arburst(s_arburst),
+		.s_rvalid(s_rvalid), .s_rready(s_rready), 
+        .s_rdata(s_rdata), .s_rlast(s_rlast)
         );
 
     qspi_device flash_model(
@@ -371,8 +377,59 @@ module tb_qspi_controller_ip;
         end
     endtask
 
+    // ------------------- XIP testcase -------------------
+    task xip_testcase;
+        input [31:0] cfg;
+        input [31:0] opcode;
+        input [31:0] ctrl;
+        input [31:0] addr;
+        input [7:0]  len;
+        input [2:0]  size;
+        input [1:0]  burst;
+        integer i, total_beats;
+        reg [31:0] expect_data;
+        reg [31:0] exp_masked;
+        begin
+            // Setup XIP registers (CFG + OPCODE + CTRL.ENABLE)
+            apb_write(XIP_CFG_ADDR, cfg); 
+            apb_write(XIP_CMD_ADDR, opcode); 
+            apb_write(CTRL_ADDR, ctrl);
+            // Drive AXI-lite AR channel
+            @(posedge clk);
+            s_araddr  = addr;
+            s_arlen   = len;
+            s_arsize  = size;
+            s_arburst = burst;
+            s_arvalid = 1'b1;
+            wait(s_arready);
+            @(posedge clk);
+            if(dut.s_arready) s_arvalid = 1'b0;
+            total_beats = len + 1;
+            // Loop through each beat
+            for (i=0; i<total_beats; i=i+1) begin
+                expect_data = exp_data[i];
+                case (dut.s_arsize)
+                    3'd0: exp_masked = {24'h0, expect_data[31:24]}; // 1 byte
+                    3'd1: exp_masked = {16'h0, expect_data[31:16]}; // 2 bytes
+                    3'd2: exp_masked = expect_data;                 // 4 bytes
+                    default: exp_masked = 0;
+                endcase
+                wait(s_rvalid);
+                @(posedge clk);
+                if(dut.s_rvalid) s_rready =1'b1;
+                @(posedge clk); s_rready = 1'b0;
+                if (s_rdata === exp_masked)
+                    $display("         ✅ DATA READ: 0x%h", s_rdata);
+                else
+                    $display("         ❌ ERROR: DATA READ: 0x%h, EXPECT: 0x%h",s_rdata, exp_masked);
+                @(posedge clk);
+            end
+        end
+    endtask
+
     integer i,j;
     integer CNT_ERROR = 0;
+    reg [31:0] exp_data [0:255];
 
     // ------------------- Test Sequence -------------------
     initial begin
@@ -569,6 +626,48 @@ module tb_qspi_controller_ip;
         $display("\n   TC27: IRQ output test");
         check_auto_irq;
 
+        $display("\n======================================================================================");
+        $display("                              GROUP 8: XIP MODE");
+        $display("======================================================================================");
+        //Prepare data
+        flash_model.memory[7] = 8'h11;
+        flash_model.memory[8] = 8'h22;
+        flash_model.memory[9] = 8'h33;
+        flash_model.memory[10] = 8'h44;
+        flash_model.memory[11] = 8'h55;
+        flash_model.memory[12] = 8'h66;
+        flash_model.memory[13] = 8'h77;
+        flash_model.memory[14] = 8'h88;
+        flash_model.memory[11] = 8'h55;
+        flash_model.memory[12] = 8'h66;
+        flash_model.memory[13] = 8'h77;
+        flash_model.memory[14] = 8'h88;
+        exp_data[0] = 32'h11223344;
+        exp_data[1] = 32'h55667788;
+        s_rready = 0;
+
+        $display("\n   TC28: XIP Normal Read (0x03, 1-1-1, no dummy, 4 byte at 0x07, 1byte/beat)");  
+        xip_testcase(32'h0000_2040, 32'h0000_0003, 32'h0000_0003, 32'h0000_0007, 8'h00, 3'b000, 2'b01);
+        
+        $display("\n   TC29: XIP Normal Read (0x03, 1-1-1, no dummy, 4 byte at 0x07, 2byte/beat)");  
+        xip_testcase(32'h0000_2040, 32'h0000_0003, 32'h0000_0003, 32'h0000_0007, 8'h00, 3'b001, 2'b01);
+
+        $display("\n   TC30: XIP Normal Read (0x03, 1-1-1, no dummy, 4 byte at 0x07, 4byte/beat)");  
+        xip_testcase(32'h0000_2040, 32'h0000_0003, 32'h0000_0003, 32'h0000_0007, 8'h00, 3'b010, 2'b01);  
+        
+        $display("\n   TC32: XIP Dual IO Read (0xBB, 1-2-2, 8 dummy cycles, 4 byte at 0x07, 4byte/beat)");  
+        xip_testcase(32'h0000_3054, 32'h0000_00BB, 32'h0000_0003, 32'h0000_0007, 8'h00, 3'b010, 2'b01);
+        
+        $display("\n   TC31: XIP Quad IO Read (0xEB, 1-4-4, 8 dummy cycles, 8 byte tại 0x07, 4byte/beat)");  
+        xip_testcase(32'h0000_3068, 32'h0000_00EB, 32'h0000_0007, 32'h0000_0007, 8'h00, 3'b010, 2'b01);
+
+/*        
+
+        
+        $display("\n   TC31: XIP Burst Read (0x03, 1-1-1, no dummy, 8 byte at 0x07, 4byte/beat)");  
+        xip_testcase(32'h0000_2040, 32'h0000_0003, 32'h0000_0003,
+             32'h0000_0007, 8'h01, 3'b010, 2'b01);
+*/
         repeat (10) @(posedge clk);
         $finish;
     end
