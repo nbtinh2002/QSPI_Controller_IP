@@ -7,7 +7,6 @@ module dma_controller(
 	input wire          dma_sel_i,
     input wire          dma_enable_i,
     input wire          dma_dir_i,
-    output reg          pready,
 	
     // Interact with apb_interface module
     input wire          dma_start_i, // 1-pulse từ apb
@@ -17,14 +16,14 @@ module dma_controller(
 
     // Interact with read_axi4_interface module
     output reg          start_read,
-    output reg  [31:0]  r_size_data,
+    output      [31:0]  r_size_data,
     output   	[31:0]  raddr_reg,
 	input wire          read_done,
 
 
     // Interact with write_axi4_interface module
     output reg          start_write,
-    output reg  [31:0]  w_size_data,
+    output      [31:0]  w_size_data,
     output     	[31:0]  waddr_reg,
     input wire          write_done,
 	output              dma_ce_done,
@@ -122,7 +121,7 @@ module dma_controller(
         end
     end
 
-    //process for busy and pready
+    //process for busy 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n)
             dma_busy <= 0;
@@ -133,11 +132,5 @@ module dma_controller(
         end
     end
 
-    // PREADY generation (1-cycle pulse)
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n)
-            pready <= 0;
-        else
-            pready <= dma_start;
-    end
+
 endmodule

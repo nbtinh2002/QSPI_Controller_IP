@@ -30,7 +30,6 @@ module qspi_xip #(
     input            xip_cont_read_i,
     input            xip_write_en_i,
     input      [7:0] xip_read_op_i,
-    input      [7:0] xip_write_op_i,
     input      [7:0] xip_mode_bits_i,
 
     output reg [1:0] xip_cmd_lanes_o,
@@ -62,7 +61,6 @@ module qspi_xip #(
     reg [1:0] state, next_state;
     
     // ------------------- Registers -------------------
-    reg [AXI_ADDR_WIDTH-1:0] addr_reg, next_addr;
     reg [2:0]   arsize_q;
     reg [1:0]   arburst_q;
     reg [7:0]   arlen_q;
@@ -95,8 +93,6 @@ module qspi_xip #(
             xip_start_o     <= 1'b0;
             xip_addr_o      <= {AXI_ADDR_WIDTH{1'b0}};
             xip_len_o       <= 32'd0;
-            addr_reg        <= {AXI_ADDR_WIDTH{1'b0}};
-            next_addr       <= {AXI_ADDR_WIDTH{1'b0}};
             arsize_q        <= 3'd0;
             arburst_q       <= 2'd0;
             arlen_q         <= 8'd0;
@@ -124,7 +120,6 @@ module qspi_xip #(
             AR_ACCEPT: begin
                 s_arready   <= 1'b0; // accepted; clear ready
                 xip_start_o <= 1;// pulse start
-                addr_reg    <= s_araddr;
                 arsize_q    <= s_arsize;
                 arburst_q   <= s_arburst;
                 arlen_q     <= s_arlen;
@@ -153,41 +148,38 @@ module qspi_xip #(
                 case (arsize_q)
                     3'd0: begin // 1 byte
                         case (byte_offset)
-                            2'd0: s_rdata = {24'd0, xip_data_i[31:24]};
-                            2'd1: s_rdata = {24'd0, xip_data_i[23:16]};
-                            2'd2: s_rdata = {24'd0, xip_data_i[15:8]};
-                            2'd3: s_rdata = {24'd0, xip_data_i[7:0]};
-                            default: s_rdata = 32'd0;
+                            2'd0: s_rdata <= {24'd0, xip_data_i[31:24]};
+                            2'd1: s_rdata <= {24'd0, xip_data_i[23:16]};
+                            2'd2: s_rdata <= {24'd0, xip_data_i[15:8]};
+                            2'd3: s_rdata <= {24'd0, xip_data_i[7:0]};
+                            default: s_rdata <= 32'd0;
                         endcase
                     end
                     3'd1: begin // 2 byte
                         case (byte_offset[1]) 
-                            1'b0: s_rdata = {16'd0, xip_data_i[31:16]};
-                            1'b1: s_rdata = {16'd0, xip_data_i[15:0]};
+                            1'b0: s_rdata <= {16'd0, xip_data_i[31:16]};
+                            1'b1: s_rdata <= {16'd0, xip_data_i[15:0]};
                         endcase
                     end
                     3'd2: begin // 4 byte
-                        s_rdata = xip_data_i;
+                        s_rdata <= xip_data_i;
                     end
-                    default: s_rdata = 32'd0;
+                    default: s_rdata <= 32'd0;
                 endcase
-                // Nếu chưa có data valid, thì chuẩn bị data mới
+
                 if (!s_rvalid && beats_sent < beats_total) begin
-                    // phát ren để lấy data từ FIFO
-                    //if(byte_offset==4)
                     xip_rx_ren_o <= 1'b1;
-                    // chờ 1 cycle FIFO xuất data
                     s_rdata  <= xip_data_i;
                     s_rvalid <= 1'b1;
                     s_rlast  <= (beats_sent == beats_total-1);
                 end
 
-                // Handshake: data ra CPU thành công
+
                 if (s_rvalid && s_rready) begin
                     beats_sent <= beats_sent + 1;
-                    s_rvalid   <= 1'b0; // clear valid, sẽ load beat kế tiếp ở vòng sau
+                    s_rvalid   <= 1'b0; // clear valid
                     if (s_rlast) begin
-                        xip_done_o <= 1'b1;  // báo done khi hết burst
+                        xip_done_o <= 1'b1;
                     end
                 end
             end
@@ -218,7 +210,7 @@ module qspi_xip #(
         xip_cont_read_o     = xip_en_i ? xip_cont_read_i : 0;
         xip_mode_bits_o     = xip_en_i ? xip_mode_bits_i : 0;
         if(SUPPORT_XIP_WRITE) begin
-            xip_opcode_o    = xip_en_i ? (xip_write_en_i ? xip_write_op_i : xip_read_op_i) : 0;
+            xip_opcode_o    = xip_en_i ? (xip_write_en_i ? 0 : xip_read_op_i) : 0;
             xip_dir_o       = xip_en_i ? (xip_write_en_i ? 1'b0 : 1'b1) : 1'b1;
         end else begin
             xip_opcode_o    = xip_en_i ? xip_read_op_i : 8'd0;

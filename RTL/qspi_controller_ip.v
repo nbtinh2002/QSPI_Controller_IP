@@ -76,7 +76,7 @@ module qspi_controller_ip#(
 	wire [1:0]  xip_cmd_lanes_i, xip_addr_lanes_i, xip_data_lanes_i, xip_addr_bytes_i;
 	wire 		xip_mode_en_i, xip_cont_read_i, xip_write_en_i;
 	wire [3:0]	xip_dummy_cycles_i;
-	wire [7:0]  xip_read_op_i, xip_write_op_i, xip_mode_bits_i;
+	wire [7:0]  xip_read_op_i, xip_mode_bits_i;
 	wire [1:0]	xip_cmd_lanes_o, xip_addr_lanes_o, xip_data_lanes_o, xip_addr_bytes_o;
 	wire 		xip_mode_en_o, xip_cont_read_o;
 	wire [3:0]	xip_dummy_cycles_o;
@@ -99,9 +99,9 @@ module qspi_controller_ip#(
 	wire		tx_wen	   =  dma_en ? dma_tx_wen : csr_tx_wen;
 	wire		rx_ren 	   =  xip_en ? xip_rx_ren_o : (dma_en ? dma_rx_ren : csr_rx_ren);
 	wire [31:0] tx_data_i  =  dma_en ? dma_data_o : csr_data_o;
-	wire [31:0] dma_data_i = (!xip_en && dma_en) ? rx_data_o  : dma_data_i;
-	wire [31:0] csr_data_i = (!xip_en && !dma_en) ? rx_data_o  : csr_data_i;
-	wire [31:0] xip_data_i = xip_en ? rx_data_o : xip_data_i;
+	wire [31:0] dma_data_i = (!xip_en && dma_en) ? rx_data_o  : 0;
+	wire [31:0] csr_data_i = (!xip_en && !dma_en) ? rx_data_o  : 0;
+	wire [31:0] xip_data_i = xip_en ? rx_data_o : 0;
 
 	wire start = xip_en ? xip_start_o : ce_start;
 	wire [1:0]  cmd_lanes  	= xip_en ? xip_cmd_lanes_o 	: cmd_cmd_lanes;
@@ -139,7 +139,6 @@ module qspi_controller_ip#(
 		.xip_cont_read_i(xip_cont_read_i),
 		.xip_write_en_i(xip_write_en_i),
 		.xip_read_op_i(xip_read_op_i),
-		.xip_write_op_i(xip_write_op_i),
 		.xip_mode_bits_i(xip_mode_bits_i),
 
 		.xip_cmd_lanes_o(xip_cmd_lanes_o),
@@ -186,7 +185,7 @@ module qspi_controller_ip#(
 		.xip_addr_bytes_o(xip_addr_bytes_i), .xip_dummy_cycles_o(xip_dummy_cycles_i), 
 		.xip_mode_en_o(xip_mode_en_i), .xip_cont_read_o(xip_cont_read_i), .xip_write_en_o(xip_write_en_i), 
 		//XIP_CMD
-		.xip_read_op_o(xip_read_op_i), .xip_write_op_o(xip_write_op_i), .xip_mode_bits_o(xip_mode_bits_i),
+		.xip_read_op_o(xip_read_op_i), .xip_mode_bits_o(xip_mode_bits_i),
 		//CMD_CFG
 		.cmd_cmd_lanes_o(cmd_cmd_lanes),
 		.cmd_addr_lanes_o(cmd_addr_lanes),

@@ -57,10 +57,6 @@ module qspi_fsm #(
 	input wire [31:0] cmd_addr,
 	input wire [31:0] cmd_len,
 	input wire [7:0]  cmd_extra_dummy,
- 	input wire		  xip_cont_read,	// XIP_CFG.bit13
-	input wire		  xip_write_en,		// XIP_CFG.bit14
-	input wire [7:0]  xip_read_op,		// XIP_CMD.bit0-7
-	input wire [7:0]  xip_write_op,		// XIP_CMD.bit8-15
 
   	// FIFO signals (TX: IP -> flash | RX: flash -> IP)
 	input  wire [7:0] qspi_data_i,
@@ -114,17 +110,8 @@ module qspi_fsm #(
 	wire [2:0] n_addr_lanes = (addr_lanes==2'd0) ? 3'd1 : (addr_lanes==2'd1) ? 3'd2 : (addr_lanes==2'd2) ? (quad_en ? 3'd4 : 3'd0) : 3'd0;
 	wire [2:0] n_data_lanes = (data_lanes==2'd0) ? 3'd1 : (data_lanes==2'd1) ? 3'd2 : (data_lanes==2'd2) ? (quad_en ? 3'd4 : 3'd0) : 3'd0;
 
-
-	// HOLD & WP pin control
-	generate
-		if (SUPPORT_HOLD_UP) begin : g_hold_wp
-			assign hold_n = ~hold_en; // active-low: 0 = pause, 1 = normal
-			assign wp_n   = ~wp_en;   // active-low: 0 = write protect, 1 = write enable
-		end else begin
-			assign hold_n = 1'b1;     // always released if not supported
-			assign wp_n   = 1'b1;     // always write-enabled if not supported
-		end
-	endgenerate
+	assign hold_n = (SUPPORT_HOLD_UP) ? ~hold_en : 1'b1;
+	assign wp_n   = (SUPPORT_HOLD_UP) ? ~wp_en : 1'b1;
 
 	// LSB first support for 8 bits
 	function [7:0] bit_reverse8;
