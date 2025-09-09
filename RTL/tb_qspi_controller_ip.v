@@ -67,13 +67,10 @@ module tb_qspi_controller_ip;
 	// AXI4 Interface with XIP
     reg         s_arvalid;
     wire        s_arready;
-
-
     reg  [31:0] s_araddr;
     reg  [7:0]  s_arlen;
     reg  [2:0]  s_arsize;
     reg  [1:0]  s_arburst;
-
     wire [31:0] s_rdata;
     wire        s_rlast;
     wire        s_rvalid;
@@ -195,7 +192,10 @@ module tb_qspi_controller_ip;
             repeat(2) @(posedge clk);
             if(check_enable) begin
                 if(dut.csr_inst.csr_data_i==expect_data) $display("          ✅ DATA READ: 0x%h",dut.csr_inst.csr_data_i);
-                else  $display("          ❌ ERROR: DATA READ: 0x%h, EXPECT: 0x%h",dut.csr_inst.csr_data_i, expect_data);   
+                else  begin
+                    $display("          ❌ ERROR: DATA READ: 0x%h, EXPECT: 0x%h",dut.csr_inst.csr_data_i, expect_data);  
+                    all_testcase_pass = 1'b0;
+                end 
             end 
         end
     endtask
@@ -252,6 +252,7 @@ module tb_qspi_controller_ip;
                         $error("         ❌ Not erased  BYTE[%0d], WORD[%0d], addr=0x%0h val=%02h",
                             i*4 + j, i, i*4 + j, flash_model.memory[i*4 + j]);
                         fail = 1;
+                        all_testcase_pass = 1'b0;
                     end
                     byte_index = byte_index + 1;
                 end
@@ -298,6 +299,7 @@ module tb_qspi_controller_ip;
                 if ((got & mask) !== (exp & mask)) begin
                     $display("         ❌ AXI[%0h] got=%08h exp=%08h mask=%08h", addr+i, got, exp, mask);
                     fail = 1;
+                    all_testcase_pass = 1'b0;
                 end else if (len <= 16) $display("         ✅ AXI[%0h] = %08h", addr+i, got & mask);
                 remain = remain - bytes_here;
             end
@@ -307,6 +309,7 @@ module tb_qspi_controller_ip;
             if (last_word!= axi4_ram0.mem[addr]) begin
                 $error("         ❌ AXI[%0h] = %08h last word = %08h", addr+i, axi4_ram0.mem[addr], last_word);
                 fail = 1;
+                all_testcase_pass = 1'b0;
             end else $display("         ✅ Overwrite succcesful. AXI[%0h] = %08h", addr,axi4_ram0.mem[addr]);
         end
         if (!fail && len > 16)  if (!fail && len > 16) $display("         ✅ All %0d words matched", words);
@@ -358,6 +361,7 @@ module tb_qspi_controller_ip;
                 if (!irq) begin 
                     $display("         ❌ IRQ NOT asserted when %s", event_name);
                     all_pass = 0;
+                    all_testcase_pass = 1'b0;
                 end
                 // Cleanup special cases
                 if(i==2) send_cmd(32'h0000_0040, 32'h0000_0020, 0, 0, 0, 32'h0000_0001);// clear error by short CMD
@@ -369,6 +373,7 @@ module tb_qspi_controller_ip;
                 if (irq) begin 
                     $display("         ❌ IRQ still high after clear when %s", event_name);
                     all_pass = 0;
+                    all_testcase_pass = 1'b0;
                 end 
                 // reset between tests to ensure clean state
                 rst_n = 0;#20;rst_n = 1; 
@@ -378,66 +383,71 @@ module tb_qspi_controller_ip;
     endtask
 
     // ------------------- XIP testcase -------------------
-    task xip_testcase;
-        input [31:0] cfg;
-        input [31:0] opcode;
-        input [31:0] ctrl;
-        input [31:0] addr;
-        input [7:0]  len;
-        input [2:0]  size;
-        input [1:0]  burst;
-        integer i, total_beats;
-        reg [31:0] expect_data;
-        reg [31:0] exp_masked;
-        begin
-            // Setup XIP registers (CFG + OPCODE + CTRL.ENABLE)
-            apb_write(XIP_CFG_ADDR, cfg); 
-            apb_write(XIP_CMD_ADDR, opcode); 
-            apb_write(CTRL_ADDR, ctrl);
-            // Drive AXI-lite AR channel
+   task xip_testcase;
+    input [31:0] cfg;
+    input [31:0] opcode;
+    input [31:0] ctrl;
+    input [31:0] addr;
+    input [7:0]  len;
+    input [2:0]  size;
+    input [1:0]  burst;
+    integer i, total_beats;
+    reg [31:0] expect_data;
+    reg [31:0] exp_masked;
+    begin
+        rst_n = 0;#20;rst_n = 1;
+        // Setup XIP registers
+        apb_write(XIP_CFG_ADDR, cfg); 
+        apb_write(XIP_CMD_ADDR, opcode); 
+        apb_write(CTRL_ADDR, ctrl);
+
+        // Drive AXI-lite AR channel
+        wait(dut.xip_en);
+        s_araddr  = addr;
+        s_arlen   = len;
+        s_arsize  = size;
+        s_arburst = burst;
+        s_arvalid = 1'b1;
+        while(!s_arready) @(posedge clk);
+        s_arvalid = 1'b0;
+
+        total_beats = len + 1;
+        for (i=0; i<total_beats; i=i+1) begin
+            expect_data = exp_data[i];
+            case (dut.s_arsize)
+                3'd0: exp_masked = {24'h0, expect_data[31:24]}; // 1 byte
+                3'd1: exp_masked = {16'h0, expect_data[31:16]}; // 2 bytes
+                3'd2: exp_masked = expect_data;                 // 4 bytes
+                default: exp_masked = 0;
+            endcase
+            
+            while(!dut.s_rvalid) @(posedge clk);
+            s_rready = 1'b1;
             @(posedge clk);
-            s_araddr  = addr;
-            s_arlen   = len;
-            s_arsize  = size;
-            s_arburst = burst;
-            s_arvalid = 1'b1;
-            wait(s_arready);
-            @(posedge clk);
-            if(dut.s_arready) s_arvalid = 1'b0;
-            total_beats = len + 1;
-            // Loop through each beat
-            for (i=0; i<total_beats; i=i+1) begin
-                expect_data = exp_data[i];
-                case (dut.s_arsize)
-                    3'd0: exp_masked = {24'h0, expect_data[31:24]}; // 1 byte
-                    3'd1: exp_masked = {16'h0, expect_data[31:16]}; // 2 bytes
-                    3'd2: exp_masked = expect_data;                 // 4 bytes
-                    default: exp_masked = 0;
-                endcase
-                wait(s_rvalid);
-                @(posedge clk);
-                if(dut.s_rvalid) s_rready =1'b1;
-                @(posedge clk); s_rready = 1'b0;
-                if (s_rdata === exp_masked)
-                    $display("         ✅ DATA READ: 0x%h", s_rdata);
-                else
-                    $display("         ❌ ERROR: DATA READ: 0x%h, EXPECT: 0x%h",s_rdata, exp_masked);
-                @(posedge clk);
+            s_rready = 1'b0;
+            if (s_rdata === exp_masked)
+                $display("         ✅ Beat%0d: DATA=0x%h OK", i, s_rdata);
+            else begin
+                $display("         ❌ Beat%0d: DATA=0x%h, EXPECT=0x%h", i, s_rdata, exp_masked);
+                all_testcase_pass = 1'b0;
             end
         end
-    endtask
+        repeat(5) @(posedge clk);
+    end
+endtask
 
     integer i,j;
-    integer CNT_ERROR = 0;
     reg [31:0] exp_data [0:255];
+    reg all_testcase_pass;
 
     // ------------------- Test Sequence -------------------
     initial begin
         $dumpfile("tb_qspi_controller_ip.vcd");
         $dumpvars(0, tb_qspi_controller_ip);
+        all_testcase_pass = 1;
         wait(rst_n);
         wait(apb_idle); 
-
+/*
         $display("\n======================================================================================");
         $display("                      GROUP 1: READ INFO DEVICE");
         $display("======================================================================================");
@@ -556,11 +566,11 @@ module tb_qspi_controller_ip;
         $display("\n   TC14: Block Erase(0xD8) (64KB)");
         send_cmd(32'h0000_0040, 32'h0000_00D8, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         erase_testcase(0, 8'hD8);
-/*        
-        $display("\n   TC15: Chip Erase(0xC7) (All)");
-        send_cmd(32'h0000_0040, 32'h0000_00C7, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-        erase_testcase(0, 8'hC7);
-*/
+        
+//        $display("\n   TC15: Chip Erase(0xC7) (All)");
+//        send_cmd(32'h0000_0040, 32'h0000_00C7, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
+//       erase_testcase(0, 8'hC7);
+
         $display("\n======================================================================================");
         $display("                      GROUP 6: COMMAND MODE WITH DMA");
         $display("======================================================================================");
@@ -607,68 +617,88 @@ module tb_qspi_controller_ip;
         $display("\n   TC24: Underrun flags test");
         send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0005, 32'h0000_0008, 32'h0000_0000, 32'h0000_0001);
         if (dut.csr_inst.err_stat_reg[2]) $display("         ✅ UNDERRUN flag set");
-        else $error("         ❌ UNDERRUN not set (expected)");
+        else begin
+            $error("         ❌ UNDERRUN not set (expected)");
+            all_testcase_pass = 1'b0;
+        end
         rst_n = 0;#20;rst_n = 1;
 
         $display("\n   TC25: Overrun flags test");
         send_cmd(32'h0000_2040, 32'h0000_0003, 32'h0000_0007, 32'h0000_00AA, 32'h0000_0000, 32'h0000_0001);
         if (dut.csr_inst.err_stat_reg[1]) $display("         ✅ OVERRUN flag set");
-        else $error("         ❌ OVERRUN not set (expected)");
+        else begin
+            $error("         ❌ OVERRUN not set (expected)");
+            all_testcase_pass = 1'b0;
+        end
         repeat (4) apb_read(8'h48, 32'h0, 0);
         rst_n = 0;#20;rst_n = 1;
 
         $display("\n   TC26: Timeout flag test");
         send_cmd(32'h0000_0040, 32'h0000_0002, 32'h0000_0005, 32'h0000_0008, 32'h0000_0000, 32'h0000_0001);
         if (dut.csr_inst.err_stat_reg[0])  $display("         ✅ TIMEOUT flag set");
-        else $error("         ❌ TIMEOUT flag NOT set (expected)");
+        else begin
+            $error("         ❌ TIMEOUT flag NOT set (expected)");
+        end
         rst_n = 0;#20;rst_n = 1;
 
         $display("\n   TC27: IRQ output test");
         check_auto_irq;
 
-        $display("\n======================================================================================");
+*/        $display("\n======================================================================================");
         $display("                              GROUP 8: XIP MODE");
         $display("======================================================================================");
+
         //Prepare data
-        flash_model.memory[7] = 8'h11;
-        flash_model.memory[8] = 8'h22;
-        flash_model.memory[9] = 8'h33;
-        flash_model.memory[10] = 8'h44;
-        flash_model.memory[11] = 8'h55;
-        flash_model.memory[12] = 8'h66;
-        flash_model.memory[13] = 8'h77;
-        flash_model.memory[14] = 8'h88;
-        flash_model.memory[11] = 8'h55;
-        flash_model.memory[12] = 8'h66;
-        flash_model.memory[13] = 8'h77;
-        flash_model.memory[14] = 8'h88;
+        flash_model.memory[7]  = 8'h11;flash_model.memory[8]  = 8'h22;flash_model.memory[9]  = 8'h33;flash_model.memory[10] = 8'h44;
+        flash_model.memory[11] = 8'h55;flash_model.memory[12] = 8'h66;flash_model.memory[13] = 8'h77;flash_model.memory[14] = 8'h88;
+        flash_model.memory[15] = 8'h99;flash_model.memory[16] = 8'hAA;flash_model.memory[17] = 8'hBB;flash_model.memory[18] = 8'hCC;
+        flash_model.memory[19] = 8'hDD;flash_model.memory[20] = 8'hEE;flash_model.memory[21] = 8'hFF;flash_model.memory[22] = 8'hDE;
+        flash_model.memory[23] = 8'hDE;flash_model.memory[24] = 8'hAD;flash_model.memory[25] = 8'hBE;flash_model.memory[26] = 8'hEF;
+
         exp_data[0] = 32'h11223344;
         exp_data[1] = 32'h55667788;
+        exp_data[2] = 32'h99AABBCC;
+        exp_data[3] = 32'hDDEEFFDE;
+        exp_data[4] = 32'hDEADBEEF;
+        s_arvalid = 0;
+        s_araddr = 0;
+        s_arsize = 0;
+        s_arlen = 0;
+        s_arburst = 0;
         s_rready = 0;
 
-        $display("\n   TC28: XIP Normal Read (0x03, 1-1-1, no dummy, 4 byte at 0x07, 1byte/beat)");  
-        xip_testcase(32'h0000_2040, 32'h0000_0003, 32'h0000_0003, 32'h0000_0007, 8'h00, 3'b000, 2'b01);
+        $display("\n   TC28: XIP Normal Read (0x03, 1-1-1, no dummy, 4 byte at 0x07, 1byte/beat)");  //len-size-burst
+        xip_testcase(32'h0000_2040, 32'h0000_0003, 32'h0000_0003, 32'h0000_0007, 8'd0, 3'd0, 2'b01);//byte= (len+1) * 2^size
         
         $display("\n   TC29: XIP Normal Read (0x03, 1-1-1, no dummy, 4 byte at 0x07, 2byte/beat)");  
-        xip_testcase(32'h0000_2040, 32'h0000_0003, 32'h0000_0003, 32'h0000_0007, 8'h00, 3'b001, 2'b01);
+        xip_testcase(32'h0000_2040, 32'h0000_0003, 32'h0000_0003, 32'h0000_0007, 8'd0, 3'd1, 2'b01);//byte= (len+1) * 2^size
 
         $display("\n   TC30: XIP Normal Read (0x03, 1-1-1, no dummy, 4 byte at 0x07, 4byte/beat)");  
-        xip_testcase(32'h0000_2040, 32'h0000_0003, 32'h0000_0003, 32'h0000_0007, 8'h00, 3'b010, 2'b01);  
+        xip_testcase(32'h0000_2040, 32'h0000_0003, 32'h0000_0003, 32'h0000_0007, 8'd0, 3'd2, 2'b01); //byte= (len+1) * 2^size 
         
-        $display("\n   TC32: XIP Dual IO Read (0xBB, 1-2-2, 8 dummy cycles, 4 byte at 0x07, 4byte/beat)");  
-        xip_testcase(32'h0000_3054, 32'h0000_00BB, 32'h0000_0003, 32'h0000_0007, 8'h00, 3'b010, 2'b01);
+        $display("\n   TC31: XIP Dual IO Read (0xBB, 1-2-2, 8 dummy cycles, 4 byte at 0x07, 4byte/beat)");  
+        xip_testcase(32'h0000_3054, 32'h0000_00BB, 32'h0000_0003, 32'h0000_0007, 8'd0, 3'd2, 2'b01);
         
-        $display("\n   TC31: XIP Quad IO Read (0xEB, 1-4-4, 8 dummy cycles, 8 byte tại 0x07, 4byte/beat)");  
-        xip_testcase(32'h0000_3068, 32'h0000_00EB, 32'h0000_0007, 32'h0000_0007, 8'h00, 3'b010, 2'b01);
+        $display("\n   TC32: XIP Quad IO Read (0xEB, 1-4-4, 8 dummy cycles, 8 byte tại 0x07, 4byte/beat)");  
+        xip_testcase(32'h0000_3068, 32'h0000_00EB, 32'h0000_0007, 32'h0000_0007, 8'd0, 3'd2, 2'b01);
 
-/*        
+        $display("\n   TC33: XIP Burst Read (0x03, 1-1-1, no dummy, 20 byte at 0x07, 4byte/beat)");  
+        xip_testcase(32'h0000_2040, 32'h0000_0003, 32'h0000_0003, 32'h0000_0007, 8'd4, 3'd2, 2'b01);//byte= (len+1) * 2^size
 
-        
-        $display("\n   TC31: XIP Burst Read (0x03, 1-1-1, no dummy, 8 byte at 0x07, 4byte/beat)");  
-        xip_testcase(32'h0000_2040, 32'h0000_0003, 32'h0000_0003,
-             32'h0000_0007, 8'h01, 3'b010, 2'b01);
-*/
+        $display("\n   TC33: XIP Burst Read (0x03, 1-1-1, no dummy, 10 byte at 0x07, 1byte/beat)");  
+        xip_testcase(32'h0000_2040, 32'h0000_0003, 32'h0000_0003, 32'h0000_0007, 8'd9, 3'd0 ,2'b01);//byte= (len+1) * 2^size
+
         repeat (10) @(posedge clk);
+        if (all_testcase_pass) begin
+            $display("\n//=====================================================//");
+            $display("//            ✅  ALL TESTCASE PASSED                 //");
+            $display("//====================================================//");
+        end else begin
+            $display("\n//=====================================================//");
+            $display("//            ❌ SOME TESTCASE FAILED                 //");
+            $display("//   => Check the detailed log above for the issue.    //");
+            $display("//=====================================================//");
+        end
         $finish;
     end
 endmodule

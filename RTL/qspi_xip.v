@@ -19,6 +19,7 @@ module qspi_xip #(
     // CSR Signals
     input       xip_en_i, xip_qspi_done_i,
     output reg  xip_active_o,
+    output reg  xip_done_o,
 
     input      [1:0] xip_cmd_lanes_i,
     input      [1:0] xip_addr_lanes_i,
@@ -42,7 +43,6 @@ module qspi_xip #(
     output reg [7:0] xip_opcode_o,
     output reg [7:0] xip_mode_bits_o,
 
-
     // AXI4 Slave Interface
     input  wire                     s_arvalid,
     output reg                      s_arready,
@@ -63,11 +63,13 @@ module qspi_xip #(
     
     // ------------------- Registers -------------------
     reg [AXI_ADDR_WIDTH-1:0] addr_reg, next_addr;
-    reg [2:0]  arsize_q;
-    reg [1:0]  arburst_q;
-    reg [7:0]  arlen_q;
-    reg [15:0] beats_total, beats_sent;
-    reg        xip_qspi_done_q;
+    reg [2:0]   arsize_q;
+    reg [1:0]   arburst_q;
+    reg [7:0]   arlen_q;
+    reg [15:0]  beats_total, beats_sent;
+    reg         xip_qspi_done_q;
+    reg         rready_latch;
+    reg [1:0] byte_offset;
     // ------------------- Sequential FSM -------------------
      always@(posedge clk or negedge resetn) begin
         if(!resetn) state <= IDLE;
@@ -80,7 +82,7 @@ module qspi_xip #(
         case(state)
             IDLE:      if(xip_en_i && s_arvalid) next_state = AR_ACCEPT;
             AR_ACCEPT: next_state = WAIT_FSM;
-            WAIT_FSM:  if(xip_qspi_done_q) next_state = SEND_DATA;
+            WAIT_FSM:  if(xip_qspi_done_i) next_state = SEND_DATA;
             SEND_DATA: if (beats_sent >= beats_total) next_state = IDLE;
             default: next_state = IDLE;
         endcase
@@ -89,43 +91,49 @@ module qspi_xip #(
     // ------------------- State actions -------------------
     always@(posedge clk or negedge resetn) begin
         if(!resetn) begin
-            s_arready   <= 1'b0;
-            xip_start_o <= 1'b0;
-            xip_addr_o  <= {AXI_ADDR_WIDTH{1'b0}};
-            xip_len_o   <= 32'd0;
-            addr_reg    <= {AXI_ADDR_WIDTH{1'b0}};
-            next_addr   <= {AXI_ADDR_WIDTH{1'b0}};
-            arsize_q    <= 3'd0;
-            arburst_q   <= 2'd0;
-            arlen_q     <= 8'd0;
-            beats_total <= 16'd0;
-            beats_sent  <= 16'd0;
-            s_rdata <= {DATA_WIDTH{1'b0}};
-            s_rlast <= 1'b0;
-            s_rvalid<= 1'b0;
+            s_arready       <= 1'b0;
+            xip_start_o     <= 1'b0;
+            xip_addr_o      <= {AXI_ADDR_WIDTH{1'b0}};
+            xip_len_o       <= 32'd0;
+            addr_reg        <= {AXI_ADDR_WIDTH{1'b0}};
+            next_addr       <= {AXI_ADDR_WIDTH{1'b0}};
+            arsize_q        <= 3'd0;
+            arburst_q       <= 2'd0;
+            arlen_q         <= 8'd0;
+            beats_total     <= 16'd0;
+            beats_sent      <= 16'd0;
+            s_rdata         <= {DATA_WIDTH{1'b0}};
+            s_rlast         <= 1'b0;
+            s_rvalid        <= 1'b0;
             xip_qspi_done_q <= 1'b0;
-            xip_rx_ren_o  <= 1'b0;
+            xip_rx_ren_o    <= 1'b0;
+            xip_done_o      <= 1'b0;
+            rready_latch    <= 0;
         end else begin
+            rready_latch    <= 0;
+            xip_rx_ren_o    <= 1'b0;
             case(state)
             IDLE: begin
-                s_arready <= xip_en_i ? 1'b1 : 1'b0;
+                s_arready   <= xip_en_i ? 1'b1 : 1'b0;
                 xip_start_o <= 1'b0;
-                s_rvalid <= 1'b0;
-                beats_sent <= 16'd0;
+                s_rvalid    <= 1'b0;
+                beats_sent  <= 16'd0;
+                xip_start_o <= 1'b0;
+                xip_done_o  <= 1'b0;
             end
             AR_ACCEPT: begin
-                s_arready <= 1'b0; // accepted; clear ready
+                s_arready   <= 1'b0; // accepted; clear ready
                 xip_start_o <= 1;// pulse start
-                addr_reg <= s_araddr;
-                arsize_q <= s_arsize;
-                arburst_q <= s_arburst;
-                arlen_q <= s_arlen;
+                addr_reg    <= s_araddr;
+                arsize_q    <= s_arsize;
+                arburst_q   <= s_arburst;
+                arlen_q     <= s_arlen;
                 beats_total <= s_arlen + 1;
-                beats_sent <= 16'd0;
-                xip_addr_o <= s_araddr;
-                xip_len_o <= ((s_arlen + 8'd1) << s_arsize);
-                s_rvalid <= 1'b0;
-                s_rlast <= 1'b0;
+                beats_sent  <= 16'd0;
+                xip_addr_o  <= s_araddr;
+                xip_len_o   <= ((s_arlen + 8'd1) << s_arsize);
+                s_rvalid    <= 1'b0;
+                s_rlast     <= 1'b0;
             end
             WAIT_FSM: begin
                 xip_start_o <= 1'b0;
@@ -134,39 +142,53 @@ module qspi_xip #(
                     xip_rx_ren_o    <= 1'b1;
                 end
                 if(xip_qspi_done_q) begin
-                    s_rvalid <= 1'b1;
+                    s_rvalid        <= 1'b1;
                     xip_qspi_done_q <= 1'b0;
                     xip_rx_ren_o    <= 1'b0;
+                    beats_sent      <= 16'd0;
                 end
+                
             end
             SEND_DATA: begin
                 case (arsize_q)
-                    3'd0: s_rdata = {24'd0, xip_data_i[31:24]};
-                    3'd1: s_rdata = {16'd0, xip_data_i[31:16]};
-                    3'd2: s_rdata  <= xip_data_i; 
-                    default: s_rdata  <= 0;
-                endcase   
-                if(xip_rx_ren_o) xip_rx_ren_o    <= 1'b0;
-                if (s_rvalid && s_rready) begin
-                    s_rvalid <= 1'b0;
-                    beats_sent <= beats_sent + 1;
-                    if (arburst_q == 2'b01) begin // INCR
-                        next_addr = addr_reg + (1 << arsize_q);
-                    end else begin
-                        next_addr = addr_reg;
+                    3'd0: begin // 1 byte
+                        case (byte_offset)
+                            2'd0: s_rdata = {24'd0, xip_data_i[31:24]};
+                            2'd1: s_rdata = {24'd0, xip_data_i[23:16]};
+                            2'd2: s_rdata = {24'd0, xip_data_i[15:8]};
+                            2'd3: s_rdata = {24'd0, xip_data_i[7:0]};
+                            default: s_rdata = 32'd0;
+                        endcase
                     end
-                    addr_reg <= next_addr;
-                    xip_addr_o <= next_addr;
+                    3'd1: begin // 2 byte
+                        case (byte_offset[1]) 
+                            1'b0: s_rdata = {16'd0, xip_data_i[31:16]};
+                            1'b1: s_rdata = {16'd0, xip_data_i[15:0]};
+                        endcase
+                    end
+                    3'd2: begin // 4 byte
+                        s_rdata = xip_data_i;
+                    end
+                    default: s_rdata = 32'd0;
+                endcase
+                // Nếu chưa có data valid, thì chuẩn bị data mới
+                if (!s_rvalid && beats_sent < beats_total) begin
+                    // phát ren để lấy data từ FIFO
+                    //if(byte_offset==4)
+                    xip_rx_ren_o <= 1'b1;
+                    // chờ 1 cycle FIFO xuất data
+                    s_rdata  <= xip_data_i;
+                    s_rvalid <= 1'b1;
+                    s_rlast  <= (beats_sent == beats_total-1);
+                end
 
-                    if (beats_sent + 1 >= beats_total) begin
-                        s_rlast  <= 1'b1;
-                        s_rvalid <= 1'b0; 
-                    end else begin
-                        s_rlast  <= 1'b0;
-                        xip_rx_ren_o <= 1'b1;
+                // Handshake: data ra CPU thành công
+                if (s_rvalid && s_rready) begin
+                    beats_sent <= beats_sent + 1;
+                    s_rvalid   <= 1'b0; // clear valid, sẽ load beat kế tiếp ở vòng sau
+                    if (s_rlast) begin
+                        xip_done_o <= 1'b1;  // báo done khi hết burst
                     end
-                end else begin
-                    xip_start_o <= 1'b0;
                 end
             end
             default: begin
@@ -176,7 +198,15 @@ module qspi_xip #(
             endcase
         end
     end
-
+    always @(posedge clk or negedge resetn) begin
+        if (!resetn) begin
+            byte_offset <= 2'd0;
+        end else if (state == AR_ACCEPT) begin
+            byte_offset <= 0; // khởi tạo offset theo địa chỉ base
+        end else if (s_rvalid && s_rready) begin
+            byte_offset <= byte_offset + (1 << arsize_q); // tăng theo kích thước beat
+        end
+    end
     // ------------------- Forward CSR config -------------------
     always @(*) begin
         xip_cmd_lanes_o     = xip_en_i ? xip_cmd_lanes_i : 0;

@@ -71,7 +71,7 @@ module qspi_controller_ip#(
 	wire [7:0]	cmd_opcode, mode_bits, cmd_extra_dummy;
 	wire [31:0]	cmd_addr, cmd_len;
 
-	wire		xip_start_o, xip_dir_o;
+	wire		xip_start_o, xip_dir_o, xip_done_o;
 	wire [31:0] xip_addr_o, xip_len_o;
 	wire [1:0]  xip_cmd_lanes_i, xip_addr_lanes_i, xip_data_lanes_i, xip_addr_bytes_i;
 	wire 		xip_mode_en_i, xip_cont_read_i, xip_write_en_i;
@@ -117,7 +117,7 @@ module qspi_controller_ip#(
 
 	wire		ce_qspi_done  = !xip_en ? qspi_done : 0;
 	wire		xip_qspi_done =  xip_en ? qspi_done : 0;
-
+	wire		done		  = xip_en ? xip_done_o : ce_done;
 	// ------------------- Module Instantiation -------------------
 	qspi_xip #(.DATA_WIDTH(DATA_WIDTH),.AXI_ADDR_WIDTH(AXI_ADDR_WIDTH),
 	 			.SUPPORT_XIP_WRITE(SUPPORT_XIP_WRITE)) xip_inst(
@@ -129,7 +129,7 @@ module qspi_controller_ip#(
 		.xip_data_i(xip_data_i), .xip_rx_ren_o(xip_rx_ren_o), .xip_rx_full(rx_full),
 		// CSR
 		.xip_en_i(xip_en), .xip_qspi_done_i(xip_qspi_done),
-		.xip_active_o(xip_active),
+		.xip_active_o(xip_active), .xip_done_o(xip_done_o),
 		.xip_cmd_lanes_i(xip_cmd_lanes_i),
 		.xip_addr_lanes_i(xip_addr_lanes_i),
 		.xip_data_lanes_i(xip_data_lanes_i),
@@ -172,9 +172,9 @@ module qspi_controller_ip#(
 		.cmd_trigger_o(cmd_trigger),
 		.dma_en_o(dma_en), .hold_en_o(hold_en), .wp_en_o(wp_en),
 		// STATUS
-		.busy_i(ce_busy), .xip_active_i(xip_active), .cmd_done_i(ce_done), .dma_done_i(dma_done),
+		.busy_i(ce_busy), .xip_active_i(xip_active), .cmd_done_i(done), .dma_done_i(dma_done),
 		// INT_STAT
-		.cmd_done_set_i(ce_done),												
+		.cmd_done_set_i(done),												
 		.dma_done_set_i(dma_done),
 		.err_set_i(timeout | overrun | underrun | axi_err),
 		.fifo_tx_empty_set_i(tx_empty),
