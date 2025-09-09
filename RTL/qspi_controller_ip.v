@@ -71,7 +71,7 @@ module qspi_controller_ip#(
 	wire [7:0]	cmd_opcode, mode_bits, cmd_extra_dummy;
 	wire [31:0]	cmd_addr, cmd_len;
 
-	wire		xip_start_o, xip_dir_o, xip_done_o;
+	wire		xip_start_o, xip_dir_o, xip_done_o, xip_rx_ren_o;
 	wire [31:0] xip_addr_o, xip_len_o;
 	wire [1:0]  xip_cmd_lanes_i, xip_addr_lanes_i, xip_data_lanes_i, xip_addr_bytes_i;
 	wire 		xip_mode_en_i, xip_cont_read_i, xip_write_en_i;

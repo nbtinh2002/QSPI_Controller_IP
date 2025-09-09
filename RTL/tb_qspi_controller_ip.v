@@ -134,6 +134,10 @@ module tb_qspi_controller_ip;
         .rvalid(m_rvalid), .rdata(m_rdata), .rready(m_rready)
     );
 
+    integer i,j;
+    reg [31:0] exp_data [0:255];
+    reg all_testcase_pass;
+
     // ------------------- Clock & Reset generation -------------------
     initial begin
         clk = 0;
@@ -436,10 +440,6 @@ module tb_qspi_controller_ip;
     end
 endtask
 
-    integer i,j;
-    reg [31:0] exp_data [0:255];
-    reg all_testcase_pass;
-
     // ------------------- Test Sequence -------------------
     initial begin
         $dumpfile("tb_qspi_controller_ip.vcd");
@@ -447,7 +447,7 @@ endtask
         all_testcase_pass = 1;
         wait(rst_n);
         wait(apb_idle); 
-/*
+
         $display("\n======================================================================================");
         $display("                      GROUP 1: READ INFO DEVICE");
         $display("======================================================================================");
@@ -567,9 +567,9 @@ endtask
         send_cmd(32'h0000_0040, 32'h0000_00D8, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
         erase_testcase(0, 8'hD8);
         
-//        $display("\n   TC15: Chip Erase(0xC7) (All)");
-//        send_cmd(32'h0000_0040, 32'h0000_00C7, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
-//       erase_testcase(0, 8'hC7);
+        $display("\n   TC15: Chip Erase(0xC7) (All)");
+        send_cmd(32'h0000_0040, 32'h0000_00C7, 32'h0000_0000, 32'h0000_0004, 32'h0000_0000, 32'h0000_0001);
+       erase_testcase(0, 8'hC7);
 
         $display("\n======================================================================================");
         $display("                      GROUP 6: COMMAND MODE WITH DMA");
@@ -644,7 +644,7 @@ endtask
         $display("\n   TC27: IRQ output test");
         check_auto_irq;
 
-*/        $display("\n======================================================================================");
+        $display("\n======================================================================================");
         $display("                              GROUP 8: XIP MODE");
         $display("======================================================================================");
 
