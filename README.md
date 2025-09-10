@@ -50,7 +50,7 @@ It supports **command-based access**, **DMA transfers**, and **XIP (Execute-In-P
 
 ### Clock, Reset, and Interrupt
 
-This interface provides the basic control signals for synchronous operation and system-level event notification. The controller runs on the system clock (`clk`), resets with `rst_n`, and reports status/events through an interrupt line (`irq`).
+This interface provides the basic control signals for synchronous operation and system-level event notification. The controller runs on the system clock (`clk`), resets with `resetn`, and reports status/events through an interrupt line (`irq`).
 
 ### APB Slave Interface (Configuration & Control)
 
@@ -241,11 +241,19 @@ The QSPI Controller register map provides access to control, status, DMA, XIP, a
 ├── NguyenBaotinh_QSPI_Controller_IP.png
 ├── README.md
 └── RTL/
-    ├── csr.v
-    ├── tx_fifo.v
-    ├── rx_fifo.v
-    ├── qpsi_fsm.v
-    ├── qpsi_controller_ip.v    
+    ├── apb_mater.v
+    ├── axi4_ram_slave.v
+    ├── dma_controller.v
+    ├── dma_read_axi4.v
+    ├── dma_write_axi4.v
+    ├── qspi_ce.v
+    ├── qspi_controller_ip.v
+    ├── qspi_csr.v
+    ├── qspi_device.v
+    ├── qspi_dma.v
+    ├── qspi_fifo.v
+    ├── qspi_fsm.v
+    ├── qspi_xip.v
     └── tb_qspi_controller_ip.v
  
 ```
@@ -283,7 +291,7 @@ Testbench includes:
 
 ## Limitations
 
-- Current version does not support XIP write (requires SUPPORT_XIP_WRITE = 1).
+- Current version does not support XIP write (requires SUPPORT_XIP_WRITE = 1). and not implement DMA write.
 
 - Limited AXI burst length (default max 16).
 
