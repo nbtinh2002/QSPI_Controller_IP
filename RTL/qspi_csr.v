@@ -24,8 +24,8 @@ module qspi_csr#(
 	output wire			lsb_first_o,
 	output wire			cmd_trigger_o,// pulse 
 	output wire			dma_en_o,
-	output wire			hold_en_o,
-	output wire			wp_en_o,
+//	output wire			hold_en_o,
+//	output wire			wp_en_o,
 	// STATUS inputs
 	input  wire			busy_i,			
 	input  wire			xip_active_i,	
@@ -287,8 +287,8 @@ module qspi_csr#(
 	assign lsb_first_o	 		= ctrl_reg[5];
 	assign cmd_trigger_o 		= write && (paddr==CTRL_ADDR) && pwdata[8];// self clearing
 	assign dma_en_o		 		= ctrl_reg[9];
-	assign hold_en_o	 		= ctrl_reg[10];
-	assign wp_en_o		 		= ctrl_reg[11];
+//	assign hold_en_o	 		= ctrl_reg[10];
+//	assign wp_en_o		 		= ctrl_reg[11];
 
 	// CLK_DIV
 	assign clk_div_o 			= clk_div_reg[2:0];

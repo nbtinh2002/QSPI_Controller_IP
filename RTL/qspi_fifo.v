@@ -56,9 +56,9 @@ module qspi_fifo #(
         end else if (wr_en && !full) begin
             for (i=0; i < WR_BYTES; i=i+1) begin
                 // byte address
-                addr_byte = (wr_ptr + i >= TOTAL_BYTES) ? (wr_ptr + i - TOTAL_BYTES) : (wr_ptr + i);
+                addr_byte <= (wr_ptr + i >= TOTAL_BYTES) ? (wr_ptr + i - TOTAL_BYTES) : (wr_ptr + i);
                 // word & byte index
-                {word_idx, byte_idx} = addr_byte;
+                {word_idx, byte_idx} <= addr_byte;
                 case(byte_idx)
                     2'd0: mem[word_idx][31:24] <= data_in[8*(WR_BYTES-1-i) +: 8];
                     2'd1: mem[word_idx][23:16] <= data_in[8*(WR_BYTES-1-i) +: 8];
@@ -80,9 +80,9 @@ module qspi_fifo #(
         end else if (rd_en && !empty) begin
             for (i=0; i < RD_BYTES; i=i+1) begin
                 // byte address
-                addr_byte = (rd_ptr + i >= TOTAL_BYTES) ? (rd_ptr + i - TOTAL_BYTES) : (rd_ptr + i);
+                addr_byte <= (rd_ptr + i >= TOTAL_BYTES) ? (rd_ptr + i - TOTAL_BYTES) : (rd_ptr + i);
                 // word & byte index
-                {word_idx, byte_idx} = addr_byte;
+                {word_idx, byte_idx} <= addr_byte;
                 if (i < take_bytes)
                     case (byte_idx)
                         2'd0: data_out[8*(RD_BYTES-1-i) +: 8] <= mem[word_idx][31:24];

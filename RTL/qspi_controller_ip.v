@@ -28,8 +28,8 @@ module qspi_controller_ip#(
 	inout  wire                      io1,
 	inout  wire                      io2,
 	inout  wire                      io3,
-	output wire                      hold_n,
-	output wire                      wp_n,
+//	output wire                      hold_n,
+//	output wire                      wp_n,
 	// AXI Master (DMA)
     output wire [AXI_ADDR_WIDTH-1:0] m_awaddr,
     output wire                      m_awvalid,
@@ -59,7 +59,8 @@ module qspi_controller_ip#(
     input  wire                    	 s_rready	
 );
 	// ------------------- Internal signals -------------------
-	wire		enable, xip_en, quad_en, cpol, cpha, lsb_first, cmd_trigger, dma_en, hold_en, wp_en;
+	wire		enable, xip_en, quad_en, cpol, cpha, lsb_first, cmd_trigger, dma_en;
+//	wire		hold_en, wp_en;
 	wire 		xip_active, ce_busy, ce_done, dma_done, qspi_done, ce_start, dma_start;
 	wire [2:0]	clk_div;
 	wire 		cs_auto, cs_level;
@@ -169,7 +170,8 @@ module qspi_controller_ip#(
 		.enable_o(enable), .xip_en_o(xip_en), .quad_en_o(quad_en),
 		.cpol_o(cpol), .cpha_o(cpha), .lsb_first_o(lsb_first),
 		.cmd_trigger_o(cmd_trigger),
-		.dma_en_o(dma_en), .hold_en_o(hold_en), .wp_en_o(wp_en),
+		.dma_en_o(dma_en), 
+//		.hold_en_o(hold_en), .wp_en_o(wp_en),
 		// STATUS
 		.busy_i(ce_busy), .xip_active_i(xip_active), .cmd_done_i(done), .dma_done_i(dma_done),
 		// INT_STAT
@@ -249,15 +251,18 @@ module qspi_controller_ip#(
 		.ff_bytes_cnt(ff_bytes_cnt)
 	);
 
-	qspi_fsm #(.SUPPORT_HOLD_UP(SUPPORT_HOLD_UP)) fsm_inst(
+//	qspi_fsm #(.SUPPORT_HOLD_UP(SUPPORT_HOLD_UP)) fsm_inst(
+	qspi_fsm fsm_inst(
 		.clk(clk), .resetn(resetn),
 		// QSPI Signals
-		.sclk(sclk), .cs_n(cs_n), .hold_n(hold_n), .wp_n(wp_n),
+		.sclk(sclk), .cs_n(cs_n), 
+//		.(hold_n), .wp_n(wp_n),
 		.io0(io0), .io1(io1), .io2(io2), .io3(io3),	
 		// Input signal from CSR
 		.clk_div(clk_div), 
 		.enable(enable), .quad_en(quad_en), .cpol(1'b0), .cpha(1'b0), 
-		.lsb_first(lsb_first), .hold_en(hold_en), .wp_en(wp_en),
+		.lsb_first(lsb_first), 
+//		.hold_en(hold_en), .wp_en(wp_en),
 		.cs_auto(1'b1), .cs_level(cs_level), .cs_delay(cs_delay),
 		// CMD & XIP field
 		.cmd_lanes(cmd_lanes),

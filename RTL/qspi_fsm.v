@@ -12,7 +12,7 @@
 //		+ DONE & ERROR FLAGS																	 //
 //===============================================================================================//
 module qspi_fsm #(
-	parameter	SUPPORT_HOLD_UP = 0,
+//	parameter	SUPPORT_HOLD_UP = 0,
 	parameter 	TIMEOUT_MAX = 32'd1000
 )(
 	// QPSI Interface
@@ -20,8 +20,8 @@ module qspi_fsm #(
 	input  wire	resetn,
 	output wire	sclk,
 	output wire	cs_n,
-	output wire	hold_n,
-	output wire	wp_n,
+//	output wire	hold_n,
+//	output wire	wp_n,
 	inout  wire	io0,
 	inout  wire	io1,
 	inout  wire	io2,
@@ -38,8 +38,8 @@ module qspi_fsm #(
 	input wire		 cpol,		// CTRL.bit3
 	input wire		 cpha,		// CTRL.bit4
 	input wire		 lsb_first,	// CTRL.bit5
-	input wire		 hold_en,	// CTRL.bit10
-	input wire		 wp_en,		// CTRL.bit11
+//	input wire		 hold_en,	// CTRL.bit10
+//	input wire		 wp_en,		// CTRL.bit11
 	input wire		 cs_auto,	// CS_CTRL.bit0
 	input wire		 cs_level,	// CS_CTRL.bit1
   	input wire [1:0] cs_delay,	// CS_CTRL.bit2-3
@@ -110,8 +110,8 @@ module qspi_fsm #(
 	wire [2:0] n_addr_lanes = (addr_lanes==2'd0) ? 3'd1 : (addr_lanes==2'd1) ? 3'd2 : (addr_lanes==2'd2) ? (quad_en ? 3'd4 : 3'd0) : 3'd0;
 	wire [2:0] n_data_lanes = (data_lanes==2'd0) ? 3'd1 : (data_lanes==2'd1) ? 3'd2 : (data_lanes==2'd2) ? (quad_en ? 3'd4 : 3'd0) : 3'd0;
 
-	assign hold_n = (SUPPORT_HOLD_UP) ? ~hold_en : 1'b1;
-	assign wp_n   = (SUPPORT_HOLD_UP) ? ~wp_en : 1'b1;
+//	assign hold_n = (SUPPORT_HOLD_UP) ? ~hold_en : 1'b1;
+//	assign wp_n   = (SUPPORT_HOLD_UP) ? ~wp_en : 1'b1;
 
 	// LSB first support for 8 bits
 	function [7:0] bit_reverse8;
