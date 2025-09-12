@@ -5,48 +5,52 @@ module qspi_xip #(
 )(
     input   clk,
     input   resetn,
-    // QSPI FSM
-    output reg                      xip_start_o,
+    
+    // Status transaction
+    output reg  xip_start_o,// ==> FSM
+    output reg  xip_active_o,// ==> CSR
+    output reg  xip_done_o, // ==> CSR
+
+    // CSR --(XIP)--> FSM
+    input      [1:0] xip_cmd_lanes_i,
+    output reg [1:0] xip_cmd_lanes_o,
+    input      [1:0] xip_addr_lanes_i,
+    output reg [1:0] xip_addr_lanes_o,
+    input      [1:0] xip_data_lanes_i,
+    output reg [1:0] xip_data_lanes_o,
+    input      [1:0] xip_addr_bytes_i,
+    output reg [1:0] xip_addr_bytes_o,
+    input      [3:0] xip_dummy_cycles_i,
+    output reg [3:0] xip_dummy_cycles_o,
+    input            xip_mode_en_i,
+    output reg       xip_mode_en_o,
+    input            xip_cont_read_i,
+    output reg       xip_cont_read_o,
+    input      [7:0] xip_mode_bits_i,
+    output reg [7:0] xip_mode_bits_o,
+    //input            xip_write_op_i,
+    input      [7:0] xip_read_op_i,
+    output reg [7:0] xip_opcode_o,    
+
+    // CSR interaction
+    input                           xip_en_i, 
+    input                           xip_qspi_done_i,
+
+    // FSM interaction
     output reg [AXI_ADDR_WIDTH-1:0] xip_addr_o,
     output reg [31:0]               xip_len_o,
     output reg                      xip_dir_o,
 
-    //RX FIFO
-    input [DATA_WIDTH-1:0] xip_data_i,
-    input       xip_rx_full,
-    output reg  xip_rx_ren_o,
-
-    // CSR Signals
-    input       xip_en_i, xip_qspi_done_i,
-    output reg  xip_active_o,
-    output reg  xip_done_o,
-
-    input      [1:0] xip_cmd_lanes_i,
-    input      [1:0] xip_addr_lanes_i,
-    input      [1:0] xip_data_lanes_i,
-    input      [1:0] xip_addr_bytes_i,
-    input      [3:0] xip_dummy_cycles_i,
-    input            xip_mode_en_i,
-    input            xip_cont_read_i,
-    input            xip_write_en_i,
-    input      [7:0] xip_read_op_i,
-    input      [7:0] xip_mode_bits_i,
-
-    output reg [1:0] xip_cmd_lanes_o,
-    output reg [1:0] xip_addr_lanes_o,
-    output reg [1:0] xip_data_lanes_o,
-    output reg [1:0] xip_addr_bytes_o,
-    output reg [3:0] xip_dummy_cycles_o,
-    output reg       xip_mode_en_o,
-    output reg       xip_cont_read_o,
-    output reg [7:0] xip_opcode_o,
-    output reg [7:0] xip_mode_bits_o,
-
+    // RX FIFO interaction
+    input [DATA_WIDTH-1:0]          xip_data_i,
+    input                           xip_rx_full,
+    output reg                      xip_rx_ren_o,
+    
     // AXI4 Slave Interface
     input  wire                     s_arvalid,
     output reg                      s_arready,
     input  wire [AXI_ADDR_WIDTH-1:0]s_araddr,
-    input  wire [2:0]               s_arsize,// 1 beat = 2^arsize (bytes) default:010
+    input  wire [2:0]               s_arsize,// 1 beat = 2^arsize (bytes)
     input  wire [7:0]               s_arlen, // burst length = arlen + 1 (beat)
     input  wire [1:0]               s_arburst,// FIXED:00, INCR:01, WRAP:10
 
@@ -59,17 +63,21 @@ module qspi_xip #(
     // ------------------- FSM states -------------------
     localparam [1:0] IDLE = 0, AR_ACCEPT = 1, WAIT_FSM = 2, SEND_DATA = 3;
     reg [1:0] state, next_state;
-    
+
     // ------------------- Registers -------------------
     reg [2:0]   arsize_q;
     reg [1:0]   arburst_q;
     reg [7:0]   arlen_q;
     reg [15:0]  beats_total, beats_sent;
     reg         xip_qspi_done_q;
-    reg         rready_latch;
-    reg [1:0] byte_offset;
+    reg [1:0]   byte_offset;
+    reg         data_in_valid;
+
+    // thanh ghi đệm dữ liệu
+    reg [DATA_WIDTH-1:0] xip_data_buf;
+
     // ------------------- Sequential FSM -------------------
-     always@(posedge clk or negedge resetn) begin
+    always@(posedge clk or negedge resetn) begin
         if(!resetn) state <= IDLE;
         else state <= next_state;
     end
@@ -78,11 +86,11 @@ module qspi_xip #(
     always@(*) begin  
         next_state = state;
         case(state)
-            IDLE:      if(xip_en_i && s_arvalid) next_state = AR_ACCEPT;
-            AR_ACCEPT: next_state = WAIT_FSM;
-            WAIT_FSM:  if(xip_qspi_done_i) next_state = SEND_DATA;
-            SEND_DATA: if (beats_sent >= beats_total) next_state = IDLE;
-            default: next_state = IDLE;
+            IDLE:       next_state = (xip_en_i && s_arvalid) ? AR_ACCEPT : IDLE;
+            AR_ACCEPT:  next_state = WAIT_FSM;
+            WAIT_FSM:   next_state = (xip_qspi_done_q) ? SEND_DATA : WAIT_FSM;
+            SEND_DATA:  next_state = (xip_done_o) ? IDLE : SEND_DATA;
+            default:    next_state = IDLE;
         endcase
     end
 
@@ -90,7 +98,13 @@ module qspi_xip #(
     always@(posedge clk or negedge resetn) begin
         if(!resetn) begin
             s_arready       <= 1'b0;
-            xip_start_o     <= 1'b0;
+        end else begin
+            s_arready <= (state==IDLE && xip_en_i && s_arvalid) ? 1'b1 : 1'b0;
+
+        end
+    end
+    always@(posedge clk or negedge resetn) begin
+        if(!resetn) begin       
             xip_addr_o      <= {AXI_ADDR_WIDTH{1'b0}};
             xip_len_o       <= 32'd0;
             arsize_q        <= 3'd0;
@@ -103,24 +117,17 @@ module qspi_xip #(
             s_rvalid        <= 1'b0;
             xip_qspi_done_q <= 1'b0;
             xip_rx_ren_o    <= 1'b0;
-            xip_done_o      <= 1'b0;
-            rready_latch    <= 0;
+            xip_data_buf    <= {DATA_WIDTH{1'b0}};
+            data_in_valid <= 1'b0;
         end else begin
-            rready_latch    <= 0;
-            xip_rx_ren_o    <= 1'b0;
+            xip_rx_ren_o <= 1'b0; // default
+            data_in_valid <= 1'b0;
             case(state)
             IDLE: begin
-                s_arready   <= xip_en_i ? 1'b1 : 1'b0;
-                xip_start_o <= 1'b0;
                 s_rvalid    <= 1'b0;
                 beats_sent  <= 16'd0;
-                xip_start_o <= 1'b0;
-                xip_done_o  <= 1'b0;
             end
             AR_ACCEPT: begin
-                s_arready   <= 1'b0; // accepted; clear ready
-                xip_start_o <= 1;// pulse start
-                xip_active_o <= 1;
                 arsize_q    <= s_arsize;
                 arburst_q   <= s_arburst;
                 arlen_q     <= s_arlen;
@@ -132,75 +139,76 @@ module qspi_xip #(
                 s_rlast     <= 1'b0;
             end
             WAIT_FSM: begin
-                xip_start_o <= 1'b0;
+                
                 if (xip_qspi_done_i && !xip_rx_full) begin
                     xip_qspi_done_q <= 1'b1;
-                    xip_rx_ren_o    <= 1'b1;
+                    xip_rx_ren_o    <= 1'b1;// get first word
                 end
-                if(xip_qspi_done_q) begin
-                    s_rvalid        <= 1'b1;
-                    xip_qspi_done_q <= 1'b0;
-                    xip_rx_ren_o    <= 1'b0;
-                    beats_sent      <= 16'd0;
-                end
-                
+                if (xip_rx_ren_o) data_in_valid <= 1;// wait output data in fifo
+                byte_offset <= 2'd0;
             end
             SEND_DATA: begin
+                 if(data_in_valid) xip_data_buf <= xip_data_i;// get data valid from fifo
                 case (arsize_q)
-                    3'd0: begin // 1 byte
-                        case (byte_offset)
-                            2'd0: s_rdata <= {24'd0, xip_data_i[31:24]};
-                            2'd1: s_rdata <= {24'd0, xip_data_i[23:16]};
-                            2'd2: s_rdata <= {24'd0, xip_data_i[15:8]};
-                            2'd3: s_rdata <= {24'd0, xip_data_i[7:0]};
-                            default: s_rdata <= 32'd0;
-                        endcase
-                    end
-                    3'd1: begin // 2 byte
-                        case (byte_offset[1]) 
-                            1'b0: s_rdata <= {16'd0, xip_data_i[31:16]};
-                            1'b1: s_rdata <= {16'd0, xip_data_i[15:0]};
-                        endcase
-                    end
-                    3'd2: begin // 4 byte
-                        s_rdata <= xip_data_i;
-                    end
+                    3'd0: case (byte_offset)
+                            2'd0: s_rdata <= {24'd0, xip_data_buf[31:24]};
+                            2'd1: s_rdata <= {24'd0, xip_data_buf[23:16]};
+                            2'd2: s_rdata <= {24'd0, xip_data_buf[15:8]};
+                            2'd3: s_rdata <= {24'd0, xip_data_buf[7:0]};
+                          endcase
+                    3'd1: case (byte_offset[1])
+                            1'b0: s_rdata <= {16'd0, xip_data_buf[31:16]};
+                            1'b1: s_rdata <= {16'd0, xip_data_buf[15:0]};
+                          endcase
+                    3'd2: s_rdata <= xip_data_buf;
                     default: s_rdata <= 32'd0;
                 endcase
 
                 if (!s_rvalid && beats_sent < beats_total) begin
-                    xip_rx_ren_o <= 1'b1;
-                    s_rdata  <= xip_data_i;
+                    // Nếu đã xuất hết word hiện tại thì xin word mới
+                    if (((arsize_q==3'd2) ||
+                        (arsize_q==3'd1 && byte_offset[1]) ||
+                        (arsize_q==3'd0 && byte_offset==3)) && !data_in_valid) begin
+                        xip_rx_ren_o <= 1'b1;
+                    end
+                    if (xip_rx_ren_o) xip_data_buf <= xip_data_i;
                     s_rvalid <= 1'b1;
                     s_rlast  <= (beats_sent == beats_total-1);
                 end
 
-
                 if (s_rvalid && s_rready) begin
+                    byte_offset <= byte_offset + (1 << arsize_q);
                     beats_sent <= beats_sent + 1;
-                    s_rvalid   <= 1'b0; // clear valid
-                    if (s_rlast) begin
-                        xip_done_o <= 1'b1;
-                        xip_active_o <= 1'b0;
-                    end
+                    s_rvalid   <= 1'b0;
                 end
             end
             default: begin
-                s_arready <= 1'b0;
-                xip_start_o <= 1'b0;
+//                s_arready   <= 1'b0;
             end
             endcase
         end
     end
+
+    // ------------------- Status XIP -------------------
     always @(posedge clk or negedge resetn) begin
         if (!resetn) begin
-            byte_offset <= 2'd0;
-        end else if (state == AR_ACCEPT) begin
-            byte_offset <= 0; // khởi tạo offset theo địa chỉ base
-        end else if (s_rvalid && s_rready) begin
-            byte_offset <= byte_offset + (1 << arsize_q); // tăng theo kích thước beat
+            xip_start_o  <= 1'b0;
+            xip_active_o <= 1'b0;
+            xip_done_o   <= 1'b0;
+        end else begin
+            xip_start_o  <= 1'b0;// 1 pulse
+            xip_done_o   <= 1'b0;// 1 pulse
+            if (state == AR_ACCEPT)
+                xip_start_o <= 1'b1;
+            if (xip_start_o)
+                xip_active_o <= 1'b1;
+            if (s_rvalid && s_rready && s_rlast) begin
+                xip_active_o <= 1'b0;
+                xip_done_o   <= 1'b1;
+            end
         end
     end
+
     // ------------------- Forward CSR config -------------------
     always @(*) begin
         xip_cmd_lanes_o     = xip_en_i ? xip_cmd_lanes_i : 0;
@@ -211,12 +219,15 @@ module qspi_xip #(
         xip_mode_en_o       = xip_en_i ? xip_mode_en_i : 0;
         xip_cont_read_o     = xip_en_i ? xip_cont_read_i : 0;
         xip_mode_bits_o     = xip_en_i ? xip_mode_bits_i : 0;
+        xip_opcode_o        = xip_read_op_i;
+        xip_dir_o           = 1'b1;
+    end
+endmodule
+        /*
         if(SUPPORT_XIP_WRITE) begin
-            xip_opcode_o    = xip_en_i ? (xip_write_en_i ? 0 : xip_read_op_i) : 0;
-            xip_dir_o       = xip_en_i ? (xip_write_en_i ? 1'b0 : 1'b1) : 1'b1;
+            xip_opcode_o    = xip_en_i ? (xip_write_op_i ? 0 : xip_read_op_i) : 0;
+            xip_dir_o       = xip_en_i ? (xip_write_op_i ? 1'b0 : 1'b1) : 1'b1;
         end else begin
             xip_opcode_o    = xip_en_i ? xip_read_op_i : 8'd0;
             xip_dir_o       = 1'b1;// read only
-        end
-    end
-endmodule
+        end*/

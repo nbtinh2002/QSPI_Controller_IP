@@ -138,7 +138,6 @@ module qspi_controller_ip#(
 		.xip_dummy_cycles_i(xip_dummy_cycles_i),
 		.xip_mode_en_i(xip_mode_en_i),
 		.xip_cont_read_i(xip_cont_read_i),
-		.xip_write_en_i(xip_write_en_i),
 		.xip_read_op_i(xip_read_op_i),
 		.xip_mode_bits_i(xip_mode_bits_i),
 
@@ -272,6 +271,8 @@ module qspi_controller_ip#(
 		.mode_en(mode_en),
 		.dummy_cycles(dummy_cycles), 
 		.mode_bits(mode_bits),
+		// XIP field
+//		.xip_cont_read_i(xip_cont_read_o),
 		// CMD field
 		.cmd_dir(dir),
 		.cmd_opcode(opcode),

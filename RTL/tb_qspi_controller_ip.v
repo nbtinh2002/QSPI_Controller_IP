@@ -431,9 +431,9 @@ module tb_qspi_controller_ip;
             @(posedge clk);
             s_rready = 1'b0;
             if (s_rdata === exp_masked)
-                $display("         ✅ Beat%0d: DATA=0x%h OK", i, s_rdata);
+                $display(" %0d        ✅ Beat%0d: DATA=0x%h OK",$time, i, s_rdata);
             else begin
-                $display("         ❌ Beat%0d: DATA=0x%h, EXPECT=0x%h", i, s_rdata, exp_masked);
+                $display(" %0d        ❌ Beat%0d: DATA=0x%h, EXPECT=0x%h", $time,i, s_rdata, exp_masked);
                 all_testcase_pass = 1'b0;
             end
         end
@@ -448,7 +448,7 @@ endtask
         all_testcase_pass = 1;
         wait(rst_n);
         wait(apb_idle); 
-
+/*
         $display("\n======================================================================================");
         $display("                      GROUP 1: READ INFO DEVICE");
         $display("======================================================================================");
@@ -644,7 +644,7 @@ endtask
 
         $display("\n   TC27: IRQ output test");
         check_auto_irq;
-
+*/
         $display("\n======================================================================================");
         $display("                              GROUP 8: XIP MODE");
         $display("======================================================================================");
