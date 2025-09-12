@@ -251,7 +251,7 @@ module qspi_fsm #(
 	always@(posedge clk or negedge resetn) begin
 		if(!resetn) begin
 			div_cnt		<= 8'd0;
-			sclk_core	<= cpol;
+			sclk_core	<= cpol ? 1'b1: 1'b0;
 		end else if(clk_div != 0) begin
 			 if(div_cnt == ((8'd1<<(clk_div-1))-1)) begin
 				div_cnt		<= 8'd0;

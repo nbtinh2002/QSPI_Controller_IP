@@ -120,6 +120,7 @@ module qspi_xip #(
             AR_ACCEPT: begin
                 s_arready   <= 1'b0; // accepted; clear ready
                 xip_start_o <= 1;// pulse start
+                xip_active_o <= 1;
                 arsize_q    <= s_arsize;
                 arburst_q   <= s_arburst;
                 arlen_q     <= s_arlen;
@@ -180,6 +181,7 @@ module qspi_xip #(
                     s_rvalid   <= 1'b0; // clear valid
                     if (s_rlast) begin
                         xip_done_o <= 1'b1;
+                        xip_active_o <= 1'b0;
                     end
                 end
             end

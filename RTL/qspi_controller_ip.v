@@ -87,7 +87,7 @@ module qspi_controller_ip#(
 	wire 		dma_dir, incr_addr;
 	wire [31:0] dma_addr, dma_len;
 
-	wire 		timeout, overrun, underrun, axi_err;
+	wire 		timeout, overrun, underrun/*, axi_err*/;
 	wire [6:0]  ff_bytes_cnt, cnt_bytes_ff;
 
 	wire [3:0]	tx_level, rx_level;
@@ -177,7 +177,7 @@ module qspi_controller_ip#(
 		// INT_STAT
 		.cmd_done_set_i(done),												
 		.dma_done_set_i(dma_done),
-		.err_set_i(timeout | overrun | underrun | axi_err),
+		.err_set_i(timeout | overrun | underrun /*| axi_err*/),
 		.fifo_tx_empty_set_i(tx_empty),
 		.fifo_rx_full_set_i(rx_full),
 		// CLK_DIV, CS_CTRL												 
@@ -205,7 +205,7 @@ module qspi_controller_ip#(
 		// DMA_ADDR, DMA_LEN
  		.dma_addr_o(dma_addr), .dma_len_o(dma_len),
 		// ERR_STAT
-		.timeout_i(timeout), .overrun_i(overrun), .underrun_i(underrun), .axi_err_i(axi_err),
+		.timeout_i(timeout), .overrun_i(overrun), .underrun_i(underrun), .axi_err_i(1'b0/*axi_err*/),
 		// FIFO_STAT
 		.tx_level_i(tx_level),			.rx_level_i(rx_level),
 		.tx_full_i(tx_full), 			.rx_full_i(rx_full),

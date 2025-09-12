@@ -51,6 +51,7 @@ module qspi_fifo #(
     always @(posedge clk or negedge resetn) begin
         if (!resetn) begin
             wr_ptr <= 0;
+            for (i=0; i<=FIFO_DEPTH-1;i=i+1) mem[i] <= 32'd0;
         end else if (wr_en && !full) begin
             for (i=0; i < WR_BYTES; i=i+1) begin : write_loop
                 // local variables
