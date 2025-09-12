@@ -92,7 +92,8 @@ module tb_qspi_controller_ip;
         .psel(psel), .penable(penable), .pwrite(pwrite),
         .paddr(paddr), .pwdata(pwdata), .prdata(prdata), 
         .pready(pready), .pslverr(pslverr),
-        .sclk(sclk), .cs_n(cs_n),.hold_n(hold_n), .wp_n(wp_n),
+        .sclk(sclk), .cs_n(cs_n),
+//      .hold_n(hold_n), .wp_n(wp_n),
         .io0(io0), .io1(io1), .io2(io2), .io3(io3),
 
         // Write address

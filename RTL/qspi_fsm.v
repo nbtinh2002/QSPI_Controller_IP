@@ -114,7 +114,7 @@ module qspi_fsm #(
 //	assign wp_n   = (SUPPORT_HOLD_UP) ? ~wp_en : 1'b1;
 
 	// LSB first support for 8 bits
-	function [7:0] bit_reverse8;
+	function automatic [7:0] bit_reverse8;
     	input [7:0] din;
     	integer i;
     	begin
@@ -123,7 +123,7 @@ module qspi_fsm #(
 	endfunction
 
 	// LSB first support for 24 bits
-	function [23:0] bit_reverse24;
+	function automatic [23:0] bit_reverse24;
 		input [23:0] din;
 		integer i;
 		begin
@@ -132,7 +132,7 @@ module qspi_fsm #(
 	endfunction
 
 	// LSB first support for 32 bits
-	function [31:0] bit_reverse32;
+	function automatic [31:0] bit_reverse32;
 		input [31:0] din;
 		integer i;
 		begin

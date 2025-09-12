@@ -19,7 +19,7 @@ module qspi_fifo #(
 );
 
     //==== function log2 ==== 
-    function integer log2;
+    function automatic integer log2;
         input integer value;
         integer i;
         begin
@@ -37,12 +37,10 @@ module qspi_fifo #(
     integer i;
     reg  [31:0]         mem [0:FIFO_DEPTH-1];
     
-    reg  [PTR_WIDTH:0]   wr_ptr, rd_ptr, addr_byte, byte_cnt;//byte
-    reg  [PTR_WIDTH-2:0] word_idx;
-    reg  [1:0]           byte_idx;
+    reg  [PTR_WIDTH:0]   wr_ptr, rd_ptr, byte_cnt;//byte
 
     wire [PTR_WIDTH:0]   take_bytes = (byte_cnt >= RD_BYTES) ? RD_BYTES : byte_cnt;
-    wire [PTR_WIDTH-2:0] level_words = byte_cnt>>2;
+    wire [3:0] level_words = byte_cnt[PTR_WIDTH:2];
 
     assign empty        = (byte_cnt==0);
     assign full         = (byte_cnt + WR_BYTES > TOTAL_BYTES);
@@ -54,16 +52,20 @@ module qspi_fifo #(
         if (!resetn) begin
             wr_ptr <= 0;
         end else if (wr_en && !full) begin
-            for (i=0; i < WR_BYTES; i=i+1) begin
-                // byte address
-                addr_byte <= (wr_ptr + i >= TOTAL_BYTES) ? (wr_ptr + i - TOTAL_BYTES) : (wr_ptr + i);
-                // word & byte index
-                {word_idx, byte_idx} <= addr_byte;
-                case(byte_idx)
-                    2'd0: mem[word_idx][31:24] <= data_in[8*(WR_BYTES-1-i) +: 8];
-                    2'd1: mem[word_idx][23:16] <= data_in[8*(WR_BYTES-1-i) +: 8];
-                    2'd2: mem[word_idx][15:8 ] <= data_in[8*(WR_BYTES-1-i) +: 8];
-                    2'd3: mem[word_idx][7:0  ] <= data_in[8*(WR_BYTES-1-i) +: 8];
+            for (i=0; i < WR_BYTES; i=i+1) begin : write_loop
+                // local variables
+                reg [PTR_WIDTH:0] addr_byte_t;
+                reg [PTR_WIDTH-2:0] word_idx_t;
+                reg [1:0] byte_idx_t;
+
+                addr_byte_t = (wr_ptr + i >= TOTAL_BYTES) ? (wr_ptr + i - TOTAL_BYTES) : (wr_ptr + i);
+                {word_idx_t, byte_idx_t} = addr_byte_t;
+
+                case(byte_idx_t)
+                    2'd0: mem[word_idx_t][31:24] <= data_in[8*(WR_BYTES-1-i) +: 8];
+                    2'd1: mem[word_idx_t][23:16] <= data_in[8*(WR_BYTES-1-i) +: 8];
+                    2'd2: mem[word_idx_t][15:8 ] <= data_in[8*(WR_BYTES-1-i) +: 8];
+                    2'd3: mem[word_idx_t][7:0  ] <= data_in[8*(WR_BYTES-1-i) +: 8];
                 endcase
             end
             // update pointer
@@ -78,17 +80,21 @@ module qspi_fifo #(
             rd_ptr      <= 0;
             data_out    <= {8*RD_BYTES{1'b0}};
         end else if (rd_en && !empty) begin
-            for (i=0; i < RD_BYTES; i=i+1) begin
-                // byte address
-                addr_byte <= (rd_ptr + i >= TOTAL_BYTES) ? (rd_ptr + i - TOTAL_BYTES) : (rd_ptr + i);
-                // word & byte index
-                {word_idx, byte_idx} <= addr_byte;
+            for (i=0; i < RD_BYTES; i=i+1) begin : read_loop
+                // local variables
+                reg [PTR_WIDTH:0] addr_byte_t;
+                reg [PTR_WIDTH-2:0] word_idx_t;
+                reg [1:0] byte_idx_t;
+
+                addr_byte_t = (rd_ptr + i >= TOTAL_BYTES) ? (rd_ptr + i - TOTAL_BYTES) : (rd_ptr + i);
+                {word_idx_t, byte_idx_t} = addr_byte_t;
+
                 if (i < take_bytes)
-                    case (byte_idx)
-                        2'd0: data_out[8*(RD_BYTES-1-i) +: 8] <= mem[word_idx][31:24];
-                        2'd1: data_out[8*(RD_BYTES-1-i) +: 8] <= mem[word_idx][23:16];
-                        2'd2: data_out[8*(RD_BYTES-1-i) +: 8] <= mem[word_idx][15:8];
-                        2'd3: data_out[8*(RD_BYTES-1-i) +: 8] <= mem[word_idx][7:0];
+                    case (byte_idx_t)
+                        2'd0: data_out[8*(RD_BYTES-1-i) +: 8] <= mem[word_idx_t][31:24];
+                        2'd1: data_out[8*(RD_BYTES-1-i) +: 8] <= mem[word_idx_t][23:16];
+                        2'd2: data_out[8*(RD_BYTES-1-i) +: 8] <= mem[word_idx_t][15:8];
+                        2'd3: data_out[8*(RD_BYTES-1-i) +: 8] <= mem[word_idx_t][7:0];
                     endcase
                 else data_out[8*(RD_BYTES-i)-1 -:8] <= 8'h00;
             end
