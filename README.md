@@ -23,6 +23,8 @@ It supports **command-based access**, **DMA transfers**, and **XIP (Execute-In-P
 
 ## Architecture
 
+![Block Diagram](./QSPI_Controller_with_XIP.png)
+
 - **CSR Register Bank** (APB slave) – configuration, status, and interrupt handling.
 - **Command Engine (CE)** – executes programmable commands.
 - **DMA Engine** – AXI master for block transfers.
