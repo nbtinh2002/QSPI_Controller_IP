@@ -46,7 +46,7 @@ It supports **command-based access**, **DMA transfers**, and **XIP (Execute-In-P
 | MAX_BURST_LEN       | Integer | 16      | Max AXI burst length.       |
 | APB_ADDR_WIDTH      | Integer | 12      | APB address width (4KB).    |
 
---- 
+---
 
 ## Interface Description
 
@@ -217,6 +217,7 @@ The QSPI Controller register map provides access to control, status, DMA, XIP, a
 |        |            | 3      | AXI_ERR           | RO     | AXI bus error                                      | -       |
 
 **Notes:**
+
 - **RO**: Read-Only  
 - **WO**: Write-Only  
 - **RW**: Read/Write  
@@ -259,6 +260,7 @@ The QSPI Controller register map provides access to control, status, DMA, XIP, a
     └── tb_qspi_controller_ip.v
  
 ```
+
 ---
 
 ## Build & Simulation Guide
@@ -307,6 +309,7 @@ Testbench includes:
 - **Mr. Quang Le** – Technical Support  
 - **Thái Hải Đăng** – Project Collaborator / Support  
 - **VNCHIP TRAINING PROGRAM 2025 – Final Lab**
+
 ## License
 
 This project is licensed under the **MIT License** – see the [LICENSE](LICENSE) file for details.
